@@ -2,7 +2,7 @@
 export const defaultCatalog = {
   "Bebidas": [
     { name: "Água 5L",                    defaultQty: 1,     unit: "un", bestShop: "Deskontão"  },
-    { name: "Água Bom Jesus 12x500ml",    defaultQty: 1,     unit: "un", bestShop: "Freshmart"  },
+    { name: "Água Bom Jesus 12x500ml",    defaultQty: 1,     unit: "un", bestShop: "Fresmart"  },
     { name: "Chá Camomila Lipton",        defaultQty: 1,     unit: "cx", bestShop: "Angomart"   },
     { name: "Chá Cidreira Lipton",        defaultQty: 1,     unit: "cx", bestShop: "Fresmart"   },
     { name: "Néctar Compal Ananás 1L",    defaultQty: 1,     unit: "un", bestShop: "Maxi"       },
@@ -12,8 +12,8 @@ export const defaultCatalog = {
   "Frutas, Legumes e Verduras": [
     { name: "Abacate Kg",                 defaultQty: 1,     unit: "kg", bestShop: "Angomart"     },
     { name: "Ananás Kg",                  defaultQty: 1,     unit: "kg", bestShop: "Shoprite"     },
-    { name: "Banana de Mesa Kg",          defaultQty: 3.246, unit: "kg", bestShop: "Freshmart"    },
-    { name: "Goiaba Mix Kg",              defaultQty: 1,     unit: "kg", bestShop: "Freshmart"    },
+    { name: "Banana de Mesa Kg",          defaultQty: 3.246, unit: "kg", bestShop: "Fresmart"    },
+    { name: "Goiaba Mix Kg",              defaultQty: 1,     unit: "kg", bestShop: "Fresmart"    },
     { name: "Maçã Golden Importada",      defaultQty: 1,     unit: "kg", bestShop: "Intermarket"  },
     { name: "Maçã Top Red Importada",     defaultQty: 1,     unit: "kg", bestShop: "Maxi"         },
     { name: "Mamão Kg",                   defaultQty: 1,     unit: "kg", bestShop: "Deskontão"    },
@@ -27,7 +27,7 @@ export const defaultCatalog = {
     { name: "Uva Red Globe 500g",         defaultQty: 1,     unit: "un", bestShop: "Angomart"     },
     { name: "Batata Rena Importada",      defaultQty: 1,     unit: "kg", bestShop: "Fresmart"     },
     { name: "Cebola Importada Kg",        defaultQty: 1,     unit: "kg", bestShop: "Maxi"         },
-    { name: "Tomate Mini 300g",           defaultQty: 1,     unit: "un", bestShop: "Freshmart"    }
+    { name: "Tomate Mini 300g",           defaultQty: 1,     unit: "un", bestShop: "Fresmart"    }
   ],
   "Grãos e Mercearia": [
     { name: "Cereais Corn Flakes Nacional 1kg", defaultQty: 1, unit: "un", bestShop: "Angomart"  },
