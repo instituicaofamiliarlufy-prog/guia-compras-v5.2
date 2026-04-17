@@ -5,13 +5,12 @@ const GOOGLE_API_KEY = "AIzaSyCddd3rhCmIOkRWYvEMwD5GJOMGpIQuxXE";
 const ROUTES_KEY = GOOGLE_API_KEY;
 const MAPS_KEY   = GOOGLE_API_KEY;
 
-const LUANDA_RADIUS = 25000; // 25 km bias radius
+const LUANDA_RADIUS   = 30000; // 30 km bias for initial search
+const MAX_CANDIDATES  = 5;     // filiais candidatas por supermercado
 
 // ─────────────────────────────────────────────────────────
-// HELPERS
+// STRING HELPERS
 // ─────────────────────────────────────────────────────────
-
-// Normalise a string for comparison: lowercase, no accents, no punctuation
 function normalise(str) {
   return (str || "")
     .toLowerCase()
@@ -21,29 +20,47 @@ function normalise(str) {
     .trim();
 }
 
-// Check if the place name returned by Google is a plausible match
-// for the shop name we searched for.
-// Strategy: every word of shopName (length > 2) must appear in the place name.
+// Every significant word (>2 chars) of shopName must appear in the place name
 function isPlausibleMatch(shopName, placeDisplayName) {
   const normShop  = normalise(shopName);
   const normPlace = normalise(placeDisplayName);
-
-  // All significant words of the shop name must be present in the place name
-  const words = normShop.split(/\s+/).filter(w => w.length > 2);
+  const words     = normShop.split(/\s+/).filter(w => w.length > 2);
   if (!words.length) return false;
   return words.every(w => normPlace.includes(w));
 }
 
 // ─────────────────────────────────────────────────────────
-// PHASE 1 — Places Text Search (New)
-// Returns { shopName, placeId, displayName, address, lat, lng } or null
+// GEO HELPERS
 // ─────────────────────────────────────────────────────────
-async function findNearestPlace(shopName, biasLat, biasLng) {
+
+// Haversine distance in metres between two { lat, lng } points
+function haversine(a, b) {
+  const R  = 6371000;
+  const φ1 = a.lat * Math.PI / 180;
+  const φ2 = b.lat * Math.PI / 180;
+  const Δφ = (b.lat - a.lat) * Math.PI / 180;
+  const Δλ = (b.lng - a.lng) * Math.PI / 180;
+  const x  = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+// Centroid of a list of { lat, lng } points
+function centroid(points) {
+  if (!points.length) return { lat: 0, lng: 0 };
+  const sum = points.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 });
+  return { lat: sum.lat / points.length, lng: sum.lng / points.length };
+}
+
+// ─────────────────────────────────────────────────────────
+// PHASE 1 — Fetch ALL candidates for a shop name
+// Returns array of { shopName, placeId, displayName, address, lat, lng }
+// ─────────────────────────────────────────────────────────
+async function fetchCandidates(shopName, biasLat, biasLng) {
   const url  = "https://places.googleapis.com/v1/places:searchText";
   const body = {
     textQuery:      `${shopName} Luanda Angola`,
     languageCode:   "pt",
-    maxResultCount: 5, // get top-5 so we can pick the best match
+    maxResultCount: MAX_CANDIDATES,
     locationBias: {
       circle: {
         center: { latitude: biasLat, longitude: biasLng },
@@ -67,26 +84,97 @@ async function findNearestPlace(shopName, biasLat, biasLng) {
     throw new Error(`Places API (${shopName}): ${err?.error?.message || resp.statusText}`);
   }
 
-  const data   = await resp.json();
-  const places = data.places || [];
+  const data = await resp.json();
+  return (data.places || [])
+    .filter(p => isPlausibleMatch(shopName, p.displayName?.text || ""))
+    .map(p => ({
+      shopName,
+      placeId:     p.id,
+      displayName: p.displayName?.text || shopName,
+      address:     p.formattedAddress  || "",
+      lat:         p.location.latitude,
+      lng:         p.location.longitude,
+    }));
+}
 
-  // Find the first result whose displayName is a plausible match
-  const match = places.find(p => isPlausibleMatch(shopName, p.displayName?.text || ""));
+// ─────────────────────────────────────────────────────────
+// PHASE 1b — Smart candidate selection
+//
+// Strategy:
+//   1. For each shop, fetch up to MAX_CANDIDATES filiais.
+//   2. Compute the "working centroid" = centroid of:
+//        origin + all other shops' best-so-far candidate
+//      (initialised to their closest-to-origin candidate).
+//   3. For each shop, pick the candidate closest to the
+//      working centroid of the OTHER shops.
+//   4. Iterate once (one pass is sufficient for small N).
+//
+// This avoids picking a faraway branch when a closer one
+// exists near the cluster of the other waypoints.
+// ─────────────────────────────────────────────────────────
+async function selectBestCandidates(shops, origin, onStatus) {
+  onStatus?.("A pesquisar filiais candidatas…");
 
-  if (!match) {
-    console.warn(`[Places] No plausible match for "${shopName}" in ${places.length} results:`,
-      places.map(p => p.displayName?.text));
-    return null; // will be reported as skipped
-  }
+  // Step A: fetch all candidates in parallel
+  const allCandidates = await Promise.all(
+    shops.map(s =>
+      fetchCandidates(s.shopName, origin.lat, origin.lng)
+        .catch(err => { console.error(err); return []; })
+    )
+  );
 
-  return {
-    shopName,
-    placeId:     match.id,
-    displayName: match.displayName?.text || shopName,
-    address:     match.formattedAddress  || "",
-    lat:         match.location.latitude,
-    lng:         match.location.longitude,
-  };
+  // Separate found vs not-found
+  const foundShops    = [];
+  const skippedShops  = [];
+  const candidateSets = []; // parallel arrays with foundShops
+
+  shops.forEach((s, i) => {
+    if (allCandidates[i].length > 0) {
+      foundShops.push(s);
+      candidateSets.push(allCandidates[i]);
+    } else {
+      skippedShops.push(s);
+      console.warn(`[Places] No plausible candidates for "${s.shopName}"`);
+    }
+  });
+
+  if (!foundShops.length) return { selected: [], skipped: shops };
+
+  // Step B: initialise each shop's "current best" = candidate closest to origin
+  const currentBest = candidateSets.map(candidates =>
+    candidates.reduce((best, c) =>
+      haversine(origin, c) < haversine(origin, best) ? c : best
+    )
+  );
+
+  // Step C: one optimisation pass — for each shop, pick candidate
+  //         closest to the centroid of (origin + all other shops' currentBest)
+  const optimised = currentBest.map((_, i) => {
+    const others = [
+      origin,
+      ...currentBest.filter((_, j) => j !== i),
+    ];
+    const clusterCentre = centroid(others);
+
+    return candidateSets[i].reduce((best, c) =>
+      haversine(clusterCentre, c) < haversine(clusterCentre, best) ? c : best
+    );
+  });
+
+  // Step D: second pass for convergence (handles cases where pass 1 shifts centroid significantly)
+  const optimised2 = optimised.map((_, i) => {
+    const others = [
+      origin,
+      ...optimised.filter((_, j) => j !== i),
+    ];
+    const clusterCentre = centroid(others);
+
+    return candidateSets[i].reduce((best, c) =>
+      haversine(clusterCentre, c) < haversine(clusterCentre, best) ? c : best
+    );
+  });
+
+  return { selected: optimised2, skipped: skippedShops };
 }
 
 // ─────────────────────────────────────────────────────────
@@ -95,31 +183,23 @@ async function findNearestPlace(shopName, biasLat, biasLng) {
 async function computeOptimisedRoute(origin, returnToOrigin, places) {
   const url = "https://routes.googleapis.com/directions/v2:computeRoutes";
 
-  const toLatLngWaypoint = ({ lat, lng }) => ({
-    via: false,
-    location: { latLng: { latitude: lat, longitude: lng } },
-  });
-
-  const toPlaceWaypoint = ({ placeId }) => ({
-    via:     false,
-    placeId,
-  });
-
-  const originWP      = toLatLngWaypoint(origin);
+  const originWP = {
+    location: { latLng: { latitude: origin.lat, longitude: origin.lng } },
+  };
   const destinationWP = returnToOrigin
-    ? toLatLngWaypoint(origin)
-    : toPlaceWaypoint(places[places.length - 1]);
+    ? { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } }
+    : { placeId: places[places.length - 1].placeId };
 
   const body = {
-    origin:                 originWP,
-    destination:            destinationWP,
-    intermediates:          places.map(toPlaceWaypoint),
-    travelMode:             "DRIVE",
-    optimizeWaypointOrder:  true,
-    routingPreference:      "TRAFFIC_AWARE",
+    origin:                  originWP,
+    destination:             destinationWP,
+    intermediates:           places.map(p => ({ via: false, placeId: p.placeId })),
+    travelMode:              "DRIVE",
+    optimizeWaypointOrder:   true,
+    routingPreference:       "TRAFFIC_AWARE",
     computeAlternativeRoutes: false,
-    languageCode:           "pt-PT",
-    units:                  "METRIC",
+    languageCode:            "pt-PT",
+    units:                   "METRIC",
   };
 
   const resp = await fetch(url, {
@@ -140,58 +220,40 @@ async function computeOptimisedRoute(origin, returnToOrigin, places) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(`Routes API: ${err?.error?.message || resp.statusText}`);
   }
-  return await resp.json();
+  return resp.json();
 }
 
 // ─────────────────────────────────────────────────────────
 // MAIN EXPORT — buildItinerary
-// shops: [{ shopName, shopId, cor }] (unique, already deduped)
+// shops: [{ shopName, shopId, cor }] — already unique
 // origin: { lat, lng }
 // ─────────────────────────────────────────────────────────
 export async function buildItinerary({ shops, origin, returnToOrigin = true, onStatus }) {
-  onStatus?.("A pesquisar filiais próximas…");
 
-  // Phase 1: resolve each unique shop to a place — in parallel
-  const placeResults = await Promise.all(
-    shops.map(s =>
-      findNearestPlace(s.shopName, origin.lat, origin.lng).catch(err => {
-        console.error(err);
-        return null;
-      })
-    )
-  );
-
-  const validPlaces = placeResults.filter(Boolean);
-  const skipped     = shops.filter((s, i) => !placeResults[i]);
+  // Phase 1: select best candidate per shop using cluster optimisation
+  const { selected: validPlaces, skipped } =
+    await selectBestCandidates(shops, origin, onStatus);
 
   if (!validPlaces.length) {
     throw new Error("Nenhuma filial encontrada nas proximidades para os supermercados listados.");
   }
 
-  onStatus?.(`${validPlaces.length} filial(ais) encontrada(s). A calcular rota optimizada…`);
+  onStatus?.(`${validPlaces.length} filial(ais) seleccionada(s). A calcular rota optimizada…`);
 
-  // Phase 2: optimised route
-  let routeData;
-  try {
-    routeData = await computeOptimisedRoute(origin, returnToOrigin, validPlaces);
-  } catch (e) {
-    // If Routes API fails with multiple stops try sequential (no optimisation)
-    console.warn("Routes API optimised failed, retrying sequential:", e.message);
-    throw e;
-  }
-
-  const route = routeData.routes?.[0];
+  // Phase 2: TSP-optimised route
+  const routeData = await computeOptimisedRoute(origin, returnToOrigin, validPlaces);
+  const route     = routeData.routes?.[0];
   if (!route) throw new Error("Nenhuma rota encontrada. Verifique as coordenadas de origem.");
 
-  // Re-order places by optimised waypoint index
-  const orderIdx     = route.optimizedIntermediateWaypointIndex || validPlaces.map((_, i) => i);
+  // Re-order places by TSP result
+  const orderIdx      = route.optimizedIntermediateWaypointIndex || validPlaces.map((_, i) => i);
   const orderedPlaces = orderIdx.map(i => validPlaces[i]);
+  const legs          = route.legs || [];
 
-  const legs = route.legs || [];
   const stops = orderedPlaces.map((place, i) => ({
     ...place,
-    legDuration:  legs[i]?.duration        || "0s",
-    legDistMetres: legs[i]?.distanceMeters || 0,
+    legDuration:   legs[i]?.duration        || "0s",
+    legDistMetres: legs[i]?.distanceMeters  || 0,
   }));
 
   return {
@@ -207,7 +269,7 @@ export async function buildItinerary({ shops, origin, returnToOrigin = true, onS
 }
 
 // ─────────────────────────────────────────────────────────
-// FORMATTING HELPERS (exported for use in app.js & viewer)
+// FORMATTING HELPERS
 // ─────────────────────────────────────────────────────────
 export function parseDuration(s) {
   const m = (s || "").match(/(\d+)s/);
@@ -227,17 +289,17 @@ export function formatDistance(metres) {
 // ─────────────────────────────────────────────────────────
 // MAPS JS — lazy load + render
 // ─────────────────────────────────────────────────────────
-let mapsLoaded       = false;
-let mapsLoadPromise  = null;
+let mapsLoaded      = false;
+let mapsLoadPromise = null;
 
 export function loadMapsAPI() {
   if (mapsLoaded)      return Promise.resolve();
   if (mapsLoadPromise) return mapsLoadPromise;
   mapsLoadPromise = new Promise((resolve, reject) => {
-    const script  = document.createElement("script");
-    script.src    = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=geometry`;
-    script.async  = true;
-    script.onload = () => { mapsLoaded = true; resolve(); };
+    const script   = document.createElement("script");
+    script.src     = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=geometry`;
+    script.async   = true;
+    script.onload  = () => { mapsLoaded = true; resolve(); };
     script.onerror = () => reject(new Error("Erro ao carregar Google Maps JS."));
     document.head.appendChild(script);
   });
@@ -269,17 +331,19 @@ export async function renderMap(containerId, itinerary, supermercados = {}) {
     position: originPos, map,
     title: "Ponto de partida",
     icon: {
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: 10, fillColor: "#1A1714", fillOpacity: 1,
-      strokeColor: "#fff", strokeWeight: 2,
+      path:        google.maps.SymbolPath.CIRCLE,
+      scale:       10,
+      fillColor:   "#1A1714",
+      fillOpacity: 1,
+      strokeColor: "#fff",
+      strokeWeight: 2,
     },
     zIndex: 10,
   });
   bounds.extend(originPos);
 
-  // Stop markers
+  // Stop markers coloured by shop
   itinerary.stops.forEach((stop, i) => {
-    // Find colour from supermercados registry by shopName
     const shopEntry = Object.values(supermercados).find(s =>
       normalise(s.nome) === normalise(stop.shopName)
     );
@@ -288,11 +352,17 @@ export async function renderMap(containerId, itinerary, supermercados = {}) {
     new google.maps.Marker({
       position: pos, map,
       title: `${i + 1}. ${stop.displayName}`,
-      label: { text: String(i + 1), color: "#fff", fontFamily: "Syne,sans-serif", fontWeight: "700", fontSize: "13px" },
+      label: {
+        text: String(i + 1), color: "#fff",
+        fontFamily: "Syne,sans-serif", fontWeight: "700", fontSize: "13px",
+      },
       icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 16, fillColor: cor, fillOpacity: 1,
-        strokeColor: "#fff", strokeWeight: 2,
+        path:        google.maps.SymbolPath.CIRCLE,
+        scale:       16,
+        fillColor:   cor,
+        fillOpacity: 1,
+        strokeColor: "#fff",
+        strokeWeight: 2,
       },
       zIndex: 5,
     });
@@ -304,7 +374,9 @@ export async function renderMap(containerId, itinerary, supermercados = {}) {
     const path = google.maps.geometry.encoding.decodePath(itinerary.encodedPolyline);
     new google.maps.Polyline({
       path, map,
-      strokeColor: "#2D6A4F", strokeOpacity: 0.85, strokeWeight: 4,
+      strokeColor:   "#2D6A4F",
+      strokeOpacity: 0.85,
+      strokeWeight:  4,
     });
     path.forEach(p => bounds.extend(p));
   }
