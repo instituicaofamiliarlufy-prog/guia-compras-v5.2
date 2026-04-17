@@ -1,9 +1,9 @@
 // itinerario.js — Itinerário Inteligente v5.6
 // Google Places API (New) Text Search + Routes API computeRoutes + Maps JS
 
-const PLACES_KEY = "AIzaSyBKLXfozJI7nvryAipKBV5o__2wX16afCI";
-const ROUTES_KEY = "AIzaSyBSG1LJSPabqvH8BSZM17c2u_TM3qUEJqA";
-const MAPS_KEY   = PLACES_KEY;
+const GOOGLE_API_KEY = "AIzaSyCddd3rhCmIOkRWYvEMwD5GJOMGpIQuxXE";
+const ROUTES_KEY = GOOGLE_API_KEY;
+const MAPS_KEY   = GOOGLE_API_KEY;
 
 const LUANDA_RADIUS = 25000; // 25 km bias radius
 
@@ -56,7 +56,7 @@ async function findNearestPlace(shopName, biasLat, biasLng) {
     method: "POST",
     headers: {
       "Content-Type":     "application/json",
-      "X-Goog-Api-Key":   PLACES_KEY,
+      "X-Goog-Api-Key":   GOOGLE_API_KEY,
       "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
     },
     body: JSON.stringify(body),
