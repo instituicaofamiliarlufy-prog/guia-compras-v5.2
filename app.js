@@ -1197,7 +1197,14 @@ document.getElementById("btn-itinerario").addEventListener("click", () => {
 // ── Step navigation ─────────────────────────────────
 function showItiStep(name) {
   ["config", "loading", "result"].forEach(s => {
-    document.getElementById(`iti-step-${s}`).classList.toggle("hidden", s !== name);
+    const el = document.getElementById(`iti-step-${s}`);
+    if (s === name) {
+      el.classList.remove("hidden");
+      el.style.display = "";
+    } else {
+      el.classList.add("hidden");
+      el.style.display = "none";
+    }
   });
 }
 
@@ -1249,23 +1256,24 @@ function populateItiShops() {
     const chip = document.createElement("span");
     chip.className = "iti-shop-chip";
     chip.style.setProperty("--chip-color", s.cor || "#2D6A4F");
-    chip.innerHTML = `<span class="chip-dot" style="background:${s.cor||"#2D6A4F"}"></span>${s.nome}`;
+    chip.innerHTML = `<span class="chip-dot" style="background:${s.cor||"#2D6A4F"}"></span>${s.shopName}`;
     container.appendChild(chip);
   });
 }
 
-// Extract unique shops from current lista (resolved via catalog)
-function getShopsFromLista() {
-  if (!state.currentLista?.items) return [];
+// Extract unique shops from current lista (resolved via catalog), deduped by shopId
+function getShopsFromLista(listaData) {
+  const lista = listaData || state.currentLista;
+  if (!lista?.items) return [];
   const seen  = new Set();
   const shops = [];
-  Object.values(state.currentLista.items).forEach(listaItem => {
+  Object.values(lista.items).forEach(listaItem => {
     const r = resolveItem(listaItem);
     if (!r || !r.shopId) return;
     if (seen.has(r.shopId)) return;
     seen.add(r.shopId);
     const shop = state.supermercados[r.shopId];
-    shops.push({ shopId: r.shopId, nome: shop?.nome || r.shopId, cor: shop?.cor || "#888" });
+    shops.push({ shopId: r.shopId, shopName: shop?.nome || r.shopId, nome: shop?.nome || r.shopId, cor: shop?.cor || "#888" });
   });
   return shops;
 }
@@ -1422,7 +1430,7 @@ document.getElementById("btn-toggle-map").addEventListener("click", async () => 
     if (!itiState.mapRendered && itiState.result) {
       label.textContent = "⏳ A carregar mapa…";
       try {
-        await renderMap("iti-map", itiState.result);
+        await renderMap("iti-map", itiState.result, state.supermercados);
         itiState.mapRendered = true;
         label.textContent = "🗺️ Ocultar mapa";
       } catch (e) {

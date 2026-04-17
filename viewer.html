@@ -72,6 +72,75 @@
     @media(max-width:480px){.summary-bar{flex-wrap:wrap;gap:8px;padding:10px 14px;}}
     ::-webkit-scrollbar{width:5px;}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:100px;}
+
+    /* Itinerary button */
+    .v-iti-btn{width:100%;padding:10px 16px;background:var(--ink);color:#fff;border:none;border-radius:var(--radius);font-family:"Syne",sans-serif;font-size:.88rem;font-weight:700;cursor:pointer;margin-bottom:2px;transition:background .18s;}
+    .v-iti-btn:hover{background:var(--accent-dk);}
+
+    /* Itinerary modal (inline in viewer) */
+    .v-modal-overlay{position:fixed;inset:0;background:rgba(26,23,20,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);}
+    .v-modal-overlay.hidden{display:none;}
+    .v-modal{background:#fff;border-radius:20px;box-shadow:0 12px 40px rgba(26,23,20,.14);width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;}
+    .v-modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid var(--border-soft);flex-shrink:0;}
+    .v-modal-header h3{font-family:"Syne",sans-serif;font-size:1rem;font-weight:700;}
+    .v-modal-close{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--ink-3);cursor:pointer;background:none;border:none;transition:background .15s;}
+    .v-modal-close:hover{background:var(--surface-2);}
+    .v-modal-body{overflow-y:auto;padding:18px 22px;flex:1;}
+    .v-modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid var(--border-soft);flex-shrink:0;}
+
+    /* Shared iti styles */
+    .iti-section-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:8px;}
+    .iti-origin-tabs{display:flex;gap:6px;margin-bottom:12px;}
+    .iti-origin-tab{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:10px;font-size:.78rem;font-weight:600;color:var(--ink-3);background:#fff;cursor:pointer;text-align:center;transition:all .15s;}
+    .iti-origin-tab.active{border-color:var(--accent);background:var(--accent-lt);color:var(--accent-dk);}
+    .iti-origin-panel label{display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin:8px 0 4px;}
+    .iti-origin-panel input[type=number]{width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);font-family:inherit;font-size:.88rem;color:var(--ink);}
+    .iti-origin-panel input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-lt);}
+    .iti-hint{font-size:.75rem;color:var(--ink-3);margin:6px 0 8px;}
+    .iti-status-line{font-size:.78rem;margin-top:7px;padding:5px 9px;border-radius:7px;min-height:24px;}
+    .iti-status-line.success{background:var(--accent-lt);color:var(--accent-dk);}
+    .iti-status-line.error{background:var(--warn-lt);color:var(--warn);}
+    .iti-radio-group{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}
+    .iti-radio{display:flex;align-items:center;gap:8px;font-size:.85rem;cursor:pointer;padding:7px 11px;border:1.5px solid var(--border);border-radius:10px;transition:all .15s;}
+    .iti-radio:hover{border-color:var(--accent);background:var(--accent-lt);}
+    .iti-radio input[type=radio]{accent-color:var(--accent);width:15px;height:15px;}
+    .iti-shops-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px;}
+    .iti-shop-chip{display:inline-flex;align-items:center;gap:4px;font-size:.75rem;font-weight:600;padding:3px 9px;border-radius:100px;border:1.5px solid color-mix(in srgb,var(--chip-color) 30%,transparent);background:color-mix(in srgb,var(--chip-color) 12%,transparent);color:var(--chip-color);}
+    .chip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+    .iti-error{background:var(--warn-lt);color:var(--warn);border-radius:10px;padding:9px 13px;font-size:.82rem;margin-top:10px;font-weight:500;}
+    .iti-error.hidden{display:none;}
+    .iti-loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:18px;text-align:center;}
+    .iti-pulse-ring{position:absolute;inset:0;border-radius:50%;border:3px solid var(--accent);animation:iti-pulse 1.4s ease-in-out infinite;}
+    @keyframes iti-pulse{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.4);opacity:0}}
+    .iti-loading-icon-wrap{position:relative;width:64px;height:64px;display:flex;align-items:center;justify-content:center;}
+    .iti-loading-icon{font-size:1.8rem;position:relative;z-index:1;}
+    .iti-loading-status{font-size:.88rem;color:var(--ink-3);}
+    .iti-summary-strip{display:flex;align-items:center;justify-content:space-around;background:var(--ink);color:#fff;border-radius:14px;padding:14px;margin-bottom:14px;}
+    .iti-summary-stat{display:flex;flex-direction:column;align-items:center;gap:2px;}
+    .iti-stat-val{font-family:"Syne",sans-serif;font-size:1.1rem;font-weight:800;}
+    .iti-stat-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;opacity:.6;}
+    .iti-summary-divider{width:1px;height:32px;background:rgba(255,255,255,.2);}
+    .iti-map-toggle-btn{width:100%;padding:9px;border:1.5px solid var(--border);border-radius:10px;font-family:"Syne",sans-serif;font-size:.82rem;font-weight:600;color:var(--ink-2);background:#fff;cursor:pointer;text-align:center;margin-bottom:10px;transition:all .15s;}
+    .iti-map-toggle-btn:hover{background:var(--accent-lt);border-color:var(--accent);color:var(--accent-dk);}
+    .iti-map-container{border-radius:14px;overflow:hidden;margin-bottom:14px;border:1px solid var(--border-soft);}
+    .iti-map-container.hidden{display:none;}
+    .iti-map{width:100%;height:280px;}
+    .iti-route-steps{display:flex;flex-direction:column;}
+    .iti-step-node{display:flex;align-items:flex-start;gap:10px;}
+    .iti-step-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:"Syne",sans-serif;font-size:.78rem;font-weight:800;color:#fff;flex-shrink:0;}
+    .iti-origin-dot{font-size:.95rem;line-height:26px;text-align:center;flex-shrink:0;color:var(--ink);}
+    .iti-step-info{display:flex;flex-direction:column;gap:1px;padding-top:2px;flex:1;}
+    .iti-step-label{font-size:.88rem;font-weight:600;color:var(--ink);}
+    .iti-step-address{font-size:.72rem;color:var(--ink-3);}
+    .iti-connector{display:flex;align-items:center;gap:9px;padding:5px 0 5px 12px;}
+    .iti-connector-line{width:2px;height:24px;background:var(--border);border-radius:2px;flex-shrink:0;}
+    .iti-connector-info{font-size:.72rem;color:var(--ink-3);font-weight:500;}
+    .iti-skipped{margin-top:12px;padding:9px 13px;background:var(--gold-lt);border-radius:10px;font-size:.78rem;color:#7a5c00;}
+    .iti-skipped.hidden{display:none;}
+    .v-btn-secondary{padding:9px 18px;background:#fff;color:var(--ink-2);border:1.5px solid var(--border);border-radius:10px;font-family:"Syne",sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s;}
+    .v-btn-secondary:hover{background:var(--surface-2);}
+    .v-btn-primary{padding:9px 18px;background:var(--ink);color:#fff;border:none;border-radius:10px;font-family:"Syne",sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s;}
+    .v-btn-primary:hover{background:var(--accent-dk);}
   </style>
 </head>
 <body>
@@ -90,6 +159,9 @@
         <span class="viewer-budget-label">Orçamento</span>
         <span id="v-budget-val" class="viewer-budget-val">Kz 0</span>
       </div>
+    </div>
+    <div style="max-width:640px;margin:10px auto 0;padding:0 20px;">
+      <button id="v-btn-itinerario" class="v-iti-btn">🗺️ Itinerário Inteligente</button>
     </div>
   </header>
 
@@ -117,10 +189,86 @@
     <span id="v-budget-summary" class="summary-budget"></span>
   </div>
 
+<!-- Itinerary modal -->
+<div id="v-modal-itinerario" class="v-modal-overlay hidden">
+  <div class="v-modal">
+    <div class="v-modal-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.3rem">🗺️</span>
+        <div>
+          <h3>Itinerário Inteligente</h3>
+          <p style="font-size:.72rem;color:var(--ink-3);font-weight:300">Rota optimizada para as suas compras</p>
+        </div>
+      </div>
+      <button class="v-modal-close" id="v-iti-close">✕</button>
+    </div>
+
+    <!-- Step: config -->
+    <div id="v-iti-config" class="v-modal-body">
+      <div class="iti-section-label">Ponto de partida</div>
+      <div class="iti-origin-tabs">
+        <button class="iti-origin-tab active" data-origin="gps">📍 Localização actual</button>
+        <button class="iti-origin-tab" data-origin="manual">✏️ Coordenadas</button>
+      </div>
+      <div id="v-origin-gps">
+        <p class="iti-hint">Será utilizada a localização actual do dispositivo.</p>
+        <button id="v-btn-gps" class="v-btn-secondary" style="width:100%">📡 Obter localização</button>
+        <div id="v-gps-status" class="iti-status-line"></div>
+      </div>
+      <div id="v-origin-manual" style="display:none">
+        <label>Latitude</label><input type="number" id="v-iti-lat" value="-8.836" step="0.0001"/>
+        <label>Longitude</label><input type="number" id="v-iti-lng" value="13.234" step="0.0001"/>
+      </div>
+
+      <div class="iti-section-label" style="margin-top:14px">Destino final</div>
+      <div class="iti-radio-group">
+        <label class="iti-radio"><input type="radio" name="v-iti-dest" value="return" checked/><span>Regressar ao ponto de partida</span></label>
+        <label class="iti-radio"><input type="radio" name="v-iti-dest" value="last"/><span>Terminar no último supermercado</span></label>
+      </div>
+
+      <div class="iti-section-label">Supermercados a visitar</div>
+      <div id="v-iti-shops" class="iti-shops-chips"></div>
+
+      <div id="v-iti-error" class="iti-error hidden"></div>
+    </div>
+
+    <!-- Step: loading -->
+    <div id="v-iti-loading" class="v-modal-body" style="display:none">
+      <div class="iti-loading-wrap">
+        <div class="iti-loading-icon-wrap"><div class="iti-pulse-ring"></div><span class="iti-loading-icon">🗺️</span></div>
+        <div id="v-iti-loading-status" class="iti-loading-status">A iniciar…</div>
+      </div>
+    </div>
+
+    <!-- Step: result -->
+    <div id="v-iti-result" class="v-modal-body" style="display:none">
+      <div class="iti-summary-strip">
+        <div class="iti-summary-stat"><span class="iti-stat-val" id="v-iti-time">—</span><span class="iti-stat-label">Tempo total</span></div>
+        <div class="iti-summary-divider"></div>
+        <div class="iti-summary-stat"><span class="iti-stat-val" id="v-iti-dist">—</span><span class="iti-stat-label">Distância</span></div>
+        <div class="iti-summary-divider"></div>
+        <div class="iti-summary-stat"><span class="iti-stat-val" id="v-iti-stops">—</span><span class="iti-stat-label">Paragens</span></div>
+      </div>
+      <button id="v-btn-toggle-map" class="iti-map-toggle-btn">🗺️ Ver no mapa</button>
+      <div id="v-iti-map-container" class="iti-map-container hidden"><div id="v-iti-map" class="iti-map"></div></div>
+      <div class="iti-section-label" style="margin-bottom:10px">Ordem de visita</div>
+      <div id="v-iti-steps" class="iti-route-steps"></div>
+      <div id="v-iti-skipped" class="iti-skipped hidden"></div>
+    </div>
+
+    <div class="v-modal-footer">
+      <button id="v-iti-back" class="v-btn-secondary" style="display:none">← Recalcular</button>
+      <button id="v-iti-cancel" class="v-btn-secondary">Fechar</button>
+      <button id="v-iti-calc" class="v-btn-primary">Calcular Rota →</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, collection, onSnapshot, updateDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { buildItinerary, formatDuration, formatDistance, parseDuration, renderMap } from "./itinerario.js";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyCGzgFbleV3H6tZpOEW0voPke0LY9VTJs8",
@@ -304,6 +452,200 @@ if (!listaId) {
     if (currentLista) render(currentLista);
   });
 });
+
+// ══════════════════════════════════════════
+// ITINERÁRIO INTELIGENTE — viewer
+// ══════════════════════════════════════════
+function normalise(str) {
+  return (str||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9\s]/g,"").trim();
+}
+
+const vIti = {
+  originLatLng: null,
+  result:       null,
+  mapRendered:  false,
+};
+
+function vItiShowStep(name) {
+  ["config","loading","result"].forEach(s => {
+    const el = document.getElementById(`v-iti-${s}`);
+    el.style.display = s === name ? "" : "none";
+  });
+  document.getElementById("v-iti-back").style.display = name === "result" ? "" : "none";
+  document.getElementById("v-iti-calc").style.display = name === "result" ? "none" : "";
+}
+
+function getViewerShops() {
+  if (!currentLista?.items) return [];
+  const seen = new Set(), shops = [];
+  Object.values(currentLista.items).forEach(li => {
+    const r = resolveItem(li);
+    if (!r?.shopId) return;
+    if (seen.has(r.shopId)) return;
+    seen.add(r.shopId);
+    const shop = supermercados[r.shopId];
+    shops.push({ shopId: r.shopId, shopName: shop?.nome || r.shopId, cor: shop?.cor || "#888" });
+  });
+  return shops;
+}
+
+function populateViewerShopChips() {
+  const container = document.getElementById("v-iti-shops");
+  container.innerHTML = "";
+  getViewerShops().forEach(s => {
+    const chip = document.createElement("span");
+    chip.className = "iti-shop-chip";
+    chip.style.setProperty("--chip-color", s.cor);
+    chip.innerHTML = `<span class="chip-dot" style="background:${s.cor}"></span>${s.shopName}`;
+    container.appendChild(chip);
+  });
+  if (!container.children.length) container.innerHTML = `<span style="font-size:.8rem;color:var(--ink-3)">Nenhum supermercado identificado.</span>`;
+}
+
+// Open modal
+document.getElementById("v-btn-itinerario").addEventListener("click", () => {
+  vIti.originLatLng = null; vIti.result = null; vIti.mapRendered = false;
+  document.getElementById("v-gps-status").textContent = "";
+  document.getElementById("v-iti-error").classList.add("hidden");
+  document.getElementById("v-iti-map-container").classList.add("hidden");
+  document.getElementById("v-btn-toggle-map").textContent = "🗺️ Ver no mapa";
+  vItiShowStep("config");
+  populateViewerShopChips();
+  document.getElementById("v-modal-itinerario").classList.remove("hidden");
+});
+
+// Close
+["v-iti-close","v-iti-cancel"].forEach(id => {
+  document.getElementById(id).addEventListener("click", () => {
+    document.getElementById("v-modal-itinerario").classList.add("hidden");
+  });
+});
+document.getElementById("v-modal-itinerario").addEventListener("click", e => {
+  if (e.target === document.getElementById("v-modal-itinerario"))
+    document.getElementById("v-modal-itinerario").classList.add("hidden");
+});
+
+// Origin tabs
+document.querySelectorAll("#v-modal-itinerario .iti-origin-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("#v-modal-itinerario .iti-origin-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    const mode = tab.dataset.origin;
+    document.getElementById("v-origin-gps").style.display    = mode === "gps"    ? "" : "none";
+    document.getElementById("v-origin-manual").style.display = mode === "manual" ? "" : "none";
+  });
+});
+
+// GPS
+document.getElementById("v-btn-gps").addEventListener("click", () => {
+  const st = document.getElementById("v-gps-status");
+  if (!navigator.geolocation) { st.textContent = "⚠️ Geolocalização não suportada."; st.className = "iti-status-line error"; return; }
+  st.textContent = "A obter localização…"; st.className = "iti-status-line";
+  navigator.geolocation.getCurrentPosition(
+    pos => { vIti.originLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude }; st.textContent = `✅ ${vIti.originLatLng.lat.toFixed(4)}, ${vIti.originLatLng.lng.toFixed(4)}`; st.className = "iti-status-line success"; },
+    err => { st.textContent = `⚠️ ${err.message}`; st.className = "iti-status-line error"; },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+// Calculate
+document.getElementById("v-iti-calc").addEventListener("click", async () => {
+  const errEl = document.getElementById("v-iti-error");
+  errEl.classList.add("hidden");
+  const activeTab = document.querySelector("#v-modal-itinerario .iti-origin-tab.active")?.dataset.origin;
+  let origin;
+  if (activeTab === "gps") {
+    if (!vIti.originLatLng) { errEl.textContent = "Clique em 'Obter localização' primeiro."; errEl.classList.remove("hidden"); return; }
+    origin = vIti.originLatLng;
+  } else {
+    const lat = parseFloat(document.getElementById("v-iti-lat").value);
+    const lng = parseFloat(document.getElementById("v-iti-lng").value);
+    if (isNaN(lat)||isNaN(lng)) { errEl.textContent = "Coordenadas inválidas."; errEl.classList.remove("hidden"); return; }
+    origin = { lat, lng };
+  }
+  const shops = getViewerShops();
+  if (!shops.length) { errEl.textContent = "Nenhum supermercado identificado na lista."; errEl.classList.remove("hidden"); return; }
+  const returnToOrigin = document.querySelector("input[name='v-iti-dest']:checked")?.value === "return";
+  vItiShowStep("loading");
+  try {
+    const result = await buildItinerary({ shops, origin, returnToOrigin, onStatus: msg => { document.getElementById("v-iti-loading-status").textContent = msg; } });
+    vIti.result = result;
+    renderViewerItiResult(result);
+    vItiShowStep("result");
+  } catch(e) {
+    console.error(e);
+    vItiShowStep("config");
+    errEl.textContent = `❌ ${e.message}`;
+    errEl.classList.remove("hidden");
+  }
+});
+
+// Back
+document.getElementById("v-iti-back").addEventListener("click", () => {
+  vIti.mapRendered = false;
+  document.getElementById("v-iti-map-container").classList.add("hidden");
+  document.getElementById("v-btn-toggle-map").textContent = "🗺️ Ver no mapa";
+  vItiShowStep("config");
+});
+
+// Toggle map
+document.getElementById("v-btn-toggle-map").addEventListener("click", async () => {
+  const container = document.getElementById("v-iti-map-container");
+  const btn       = document.getElementById("v-btn-toggle-map");
+  const hidden    = container.classList.contains("hidden");
+  if (hidden) {
+    container.classList.remove("hidden");
+    btn.textContent = "🗺️ Ocultar mapa";
+    if (!vIti.mapRendered && vIti.result) {
+      btn.textContent = "⏳ A carregar mapa…";
+      try { await renderMap("v-iti-map", vIti.result, supermercados); vIti.mapRendered = true; btn.textContent = "🗺️ Ocultar mapa"; }
+      catch(e) { btn.textContent = "⚠️ Erro ao carregar mapa"; console.error(e); }
+    }
+  } else {
+    container.classList.add("hidden");
+    btn.textContent = "🗺️ Ver no mapa";
+  }
+});
+
+function renderViewerItiResult(result) {
+  document.getElementById("v-iti-time").textContent  = formatDuration(result.totalDuration);
+  document.getElementById("v-iti-dist").textContent  = formatDistance(result.totalDistance);
+  document.getElementById("v-iti-stops").textContent = result.stops.length;
+  const stepsEl = document.getElementById("v-iti-steps");
+  stepsEl.innerHTML = "";
+
+  // Origin
+  const oNode = document.createElement("div"); oNode.className="iti-step-node";
+  oNode.innerHTML=`<div class="iti-origin-dot">⬤</div><div class="iti-step-info"><span class="iti-step-label">Ponto de partida</span><span class="iti-step-address">${result.origin.lat.toFixed(4)}, ${result.origin.lng.toFixed(4)}</span></div>`;
+  stepsEl.appendChild(oNode);
+
+  result.stops.forEach((stop,i) => {
+    const shop = Object.values(supermercados).find(s => normalise(s.nome)===normalise(stop.shopName));
+    const cor  = shop?.cor || "#2D6A4F";
+    const legSecs = parseDuration(result.legs[i]?.duration||"0s");
+    const legDist = result.legs[i]?.distanceMeters||0;
+    const conn = document.createElement("div"); conn.className="iti-connector";
+    conn.innerHTML=`<div class="iti-connector-line"></div><div class="iti-connector-info">${formatDuration(legSecs)} · ${formatDistance(legDist)}</div>`;
+    stepsEl.appendChild(conn);
+    const node = document.createElement("div"); node.className="iti-step-node";
+    node.innerHTML=`<div class="iti-step-num" style="background:${cor}">${i+1}</div><div class="iti-step-info"><span class="iti-step-label">${stop.displayName}</span><span class="iti-step-address">${stop.address}</span></div>`;
+    stepsEl.appendChild(node);
+  });
+
+  if (result.returnToOrigin) {
+    const ll = result.legs[result.stops.length]||{};
+    const conn = document.createElement("div"); conn.className="iti-connector";
+    conn.innerHTML=`<div class="iti-connector-line"></div><div class="iti-connector-info">${formatDuration(parseDuration(ll.duration||"0s"))} · ${formatDistance(ll.distanceMeters||0)}</div>`;
+    stepsEl.appendChild(conn);
+    const rNode = document.createElement("div"); rNode.className="iti-step-node";
+    rNode.innerHTML=`<div class="iti-origin-dot">⬤</div><div class="iti-step-info"><span class="iti-step-label">Regressar ao ponto de partida</span></div>`;
+    stepsEl.appendChild(rNode);
+  }
+
+  const skEl = document.getElementById("v-iti-skipped");
+  if (result.skipped?.length) { skEl.textContent=`⚠️ Não encontradas filiais para: ${result.skipped.map(s=>s.shopName).join(", ")}`; skEl.classList.remove("hidden"); }
+  else skEl.classList.add("hidden");
+}
 </script>
 </body>
 </html>
