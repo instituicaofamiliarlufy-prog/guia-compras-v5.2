@@ -1,9 +1,9 @@
 // itinerario.js — Itinerário Inteligente v5.5
 // Google Places API (New) + Routes API + Maps JavaScript API
 
-const PLACES_KEY = "AIzaSyBKLXfozJI7nvryAipKBV5o__2wX16afCI";
-const ROUTES_KEY = "AIzaSyBSG1LJSPabqvH8BSZM17c2u_TM3qUEJqA";
-const MAPS_KEY   = PLACES_KEY; // same project, reuse Places key for Maps JS
+const GOOGLE_CLOUD_API_KEY = "AIzaSyCddd3rhCmIOkRWYvEMwD5GJOMGpIQuxXE";
+const ROUTES_KEY = GOOGLE_CLOUD_API_KEY;
+const MAPS_KEY   = GOOGLE_CLOUD_API_KEY; // same project, reuse Places key for Maps JS
 
 // Luanda centre bias
 const LUANDA_CENTRE = { lat: -8.836, lng: 13.234 };
@@ -31,7 +31,7 @@ async function findNearestPlace(shopName, biasLat, biasLng) {
     method: "POST",
     headers: {
       "Content-Type":     "application/json",
-      "X-Goog-Api-Key":   PLACES_KEY,
+      "X-Goog-Api-Key":   GOOGLE_CLOUD_API_KEY,
       "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
     },
     body: JSON.stringify(body),
