@@ -1,0 +1,8 @@
+{
+  "name": "Guia de Compras | Instituição Familiar",
+  "short_name": "GuiaCompras",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1f2933"
+}
