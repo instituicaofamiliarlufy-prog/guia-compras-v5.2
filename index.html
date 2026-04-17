@@ -1,35 +1,22 @@
 <!DOCTYPE html>
 <html lang="pt">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <title>Guia de Compras | Instituição Familiar</title>
-  <meta name="description"
-    content="Ferramenta Checklist de compras familiar, organizada por categorias, com quantidades e filtros." />
-  <meta property="og:title" content="Guia de Compras v5" />
-  <meta property="og:image"
-    content="https://instituicaofamiliarlufy-prog.github.io/guia-compras-v5/resources/logo.jpg" />
-
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#1f2933" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Guia de Compras v5.5</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet"/>
 </head>
 <body>
-
   <header class="app-header">
     <div class="header-inner">
       <div class="brand">
         <span class="brand-icon">🛒</span>
         <div class="brand-text">
-          <h1 id="brand-link" style="cursor:pointer;">Guia de Compras</h1>
-          <span class="brand-version">v5.4</span>
+          <h1 id="brand-link" style="cursor:pointer">Guia de Compras</h1>
+          <span class="brand-version">v5.5</span>
         </div>
       </div>
       <nav class="main-nav">
@@ -44,7 +31,7 @@
 
   <main class="app-main">
 
-    <!-- ══════════ VIEW: LISTAGEM ══════════ -->
+    <!-- ══════ VIEW: LISTAGEM ══════ -->
     <section id="view-listas" class="view hidden">
       <div class="view-header">
         <h2>As Minhas Listas</h2>
@@ -53,7 +40,7 @@
       <div id="listas-grid"></div>
     </section>
 
-    <!-- ══════════ VIEW: LISTA DETALHE ══════════ -->
+    <!-- ══════ VIEW: LISTA DETALHE ══════ -->
     <section id="view-lista" class="view hidden">
       <div class="lista-view-header">
         <button id="btn-back-listas" class="btn-back">← Voltar</button>
@@ -66,15 +53,14 @@
         </div>
         <div class="lista-header-actions">
           <button id="btn-add-to-lista" class="btn-secondary btn-sm">+ Produto</button>
-          <button id="btn-share-lista" class="btn-secondary btn-sm">🔗 Partilhar</button>
+          <button id="btn-share-lista"   class="btn-secondary btn-sm">🔗 Partilhar</button>
         </div>
       </div>
-
       <div class="lista-controls">
         <div class="filter-bar">
           <div class="search-wrap">
             <span class="search-icon">🔍</span>
-            <input type="text" id="lista-search" placeholder="Filtrar produto…" />
+            <input type="text" id="lista-search" placeholder="Filtrar produto…"/>
           </div>
           <select id="lista-shop-filter"></select>
           <select id="lista-sort">
@@ -83,73 +69,62 @@
           </select>
         </div>
       </div>
-
       <div id="lista-loading" class="loading-state"><div class="spinner"></div><span>A carregar…</span></div>
-      <div id="lista-empty" class="empty-state hidden"><div class="empty-icon">🗒️</div><p>Lista vazia.</p></div>
-      <div id="lista-content" class="lista-content hidden"></div>
-
-      <div id="lista-budget" class="budget-bar hidden">
+      <div id="lista-empty"   class="empty-state hidden"><div class="empty-icon">🗒️</div><p>Lista vazia.</p></div>
+      <div id="lista-budget"  class="budget-bar hidden">
         <div class="budget-inner">
           <span class="budget-label">Orçamento estimado</span>
           <span id="budget-total" class="budget-total">Kz 0</span>
         </div>
       </div>
-
+      <div id="lista-content" class="lista-content hidden"></div>
       <div id="lista-summary" class="lista-summary hidden">
         <span id="summary-checked">0</span> / <span id="summary-total">0</span> itens marcados
         <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
       </div>
     </section>
 
-    <!-- ══════════ VIEW: GERAR ══════════ -->
+    <!-- ══════ VIEW: GERAR ══════ -->
     <section id="view-gerar" class="view hidden">
       <div class="view-header">
         <h2>Gerar Nova Lista</h2>
         <p class="view-subtitle">Seleccione os produtos e crie uma lista</p>
       </div>
-
       <div class="gerar-meta-bar">
         <div class="date-picker-wrap">
           <label for="gerar-date">📅 Data</label>
-          <input type="date" id="gerar-date" />
+          <input type="date" id="gerar-date"/>
         </div>
         <div class="input-wrap">
           <label for="gerar-nome">📝 Nome da lista</label>
-          <input type="text" id="gerar-nome" placeholder="Compras semanais" />
+          <input type="text" id="gerar-nome" placeholder="Compras semanais"/>
         </div>
         <div class="input-wrap">
           <label for="gerar-supermercado">🛍️ Supermercado sugerido</label>
-          <input type="text" id="gerar-supermercado" placeholder="Calculado automaticamente…" readonly />
+          <input type="text" id="gerar-supermercado" placeholder="Calculado automaticamente…" readonly/>
         </div>
       </div>
-
-      <!-- Shop distribution bar -->
       <div id="gerar-shop-dist" class="shop-dist hidden">
         <div class="shop-dist-label">Distribuição por supermercado (por valor)</div>
-        <div id="shop-dist-bars" class="shop-dist-bars"></div>
+        <div id="shop-dist-bars"   class="shop-dist-bars"></div>
         <div id="shop-dist-legend" class="shop-dist-legend"></div>
       </div>
-
-      <!-- Gerar budget preview -->
       <div id="gerar-budget-preview" class="gerar-budget-preview hidden">
         <span class="budget-label">Orçamento estimado</span>
         <span id="gerar-budget-total" class="budget-total">Kz 0</span>
       </div>
-
       <div class="filter-bar">
         <div class="search-wrap">
           <span class="search-icon">🔍</span>
-          <input type="text" id="gerar-search" placeholder="Pesquisar produto…" />
+          <input type="text" id="gerar-search" placeholder="Pesquisar produto…"/>
         </div>
         <select id="gerar-cat-filter"></select>
         <select id="gerar-shop-filter"></select>
         <label class="select-all-label">
-          <input type="checkbox" id="gerar-select-all" />Seleccionar tudo
+          <input type="checkbox" id="gerar-select-all"/>Seleccionar tudo
         </label>
       </div>
-
       <div id="gerar-catalog" class="gerar-catalog"></div>
-
       <div class="gerar-footer">
         <span id="gerar-count" class="gerar-count">0 produtos seleccionados</span>
         <button id="btn-create-list" class="btn-primary" disabled>
@@ -158,33 +133,54 @@
       </div>
     </section>
 
-    <!-- ══════════ VIEW: ADMIN ══════════ -->
+    <!-- ══════ VIEW: ADMIN ══════ -->
     <section id="view-admin" class="view hidden">
       <div class="view-header">
-        <h2>Administração do Catálogo</h2>
-        <p class="view-subtitle">Gerir categorias e produtos</p>
+        <h2>Administração</h2>
+        <p class="view-subtitle">Catálogo de produtos e supermercados</p>
       </div>
-      <div class="admin-toolbar">
-        <div class="filter-bar">
-          <div class="search-wrap">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="admin-search" placeholder="Pesquisar produto…" />
+
+      <!-- Admin tabs -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="catalogo">📦 Catálogo</button>
+        <button class="admin-tab" data-tab="supermercados">🏪 Supermercados</button>
+      </div>
+
+      <!-- Tab: Catálogo -->
+      <div id="admin-tab-catalogo" class="admin-tab-panel">
+        <div class="admin-toolbar">
+          <div class="filter-bar">
+            <div class="search-wrap">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="admin-search" placeholder="Pesquisar produto…"/>
+            </div>
+            <select id="admin-cat-filter"></select>
           </div>
-          <select id="admin-cat-filter"></select>
+          <div class="admin-actions">
+            <button id="btn-seed"         class="btn-secondary">🌱 Seed Padrão</button>
+            <button id="btn-add-category" class="btn-primary">+ Categoria</button>
+          </div>
         </div>
-        <div class="admin-actions">
-          <button id="btn-seed" class="btn-secondary">🌱 Seed Padrão</button>
-          <button id="btn-add-category" class="btn-primary">+ Nova Categoria</button>
-        </div>
+        <div id="admin-catalog" class="admin-catalog"></div>
       </div>
-      <div id="admin-catalog" class="admin-catalog"></div>
+
+      <!-- Tab: Supermercados -->
+      <div id="admin-tab-supermercados" class="admin-tab-panel hidden">
+        <div class="admin-toolbar">
+          <div class="admin-actions" style="margin-left:auto">
+            <button id="btn-seed-shops"   class="btn-secondary">🌱 Seed Supermercados</button>
+            <button id="btn-add-shop"     class="btn-primary">+ Supermercado</button>
+          </div>
+        </div>
+        <div id="admin-shops-list" class="admin-shops-list"></div>
+      </div>
     </section>
 
   </main>
 
-  <!-- ══════════ MODALS ══════════ -->
+  <!-- ══════ MODALS ══════ -->
 
-  <!-- Edit Lista metadata -->
+  <!-- Edit Lista -->
   <div id="modal-edit-lista" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
@@ -192,13 +188,10 @@
         <button class="modal-close" data-modal="modal-edit-lista">✕</button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="edit-lista-id" />
-        <label>Nome da Lista</label>
-        <input type="text" id="edit-lista-nome" placeholder="Ex: Compras semanais" />
-        <label>Data</label>
-        <input type="date" id="edit-lista-date" />
-        <label>Supermercado principal</label>
-        <input type="text" id="edit-lista-shop" placeholder="Opcional" />
+        <input type="hidden" id="edit-lista-id"/>
+        <label>Nome</label><input type="text" id="edit-lista-nome"/>
+        <label>Data</label><input type="date" id="edit-lista-date"/>
+        <label>Supermercado principal</label><input type="text" id="edit-lista-shop"/>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-modal="modal-edit-lista">Cancelar</button>
@@ -207,18 +200,18 @@
     </div>
   </div>
 
-  <!-- Add product to existing lista -->
+  <!-- Add product to lista -->
   <div id="modal-add-to-lista" class="modal-overlay hidden">
     <div class="modal modal-lg">
       <div class="modal-header">
         <h3>Adicionar Produtos à Lista</h3>
         <button class="modal-close" data-modal="modal-add-to-lista">✕</button>
       </div>
-      <div class="modal-body" style="padding-bottom:0;">
-        <div class="filter-bar" style="margin-bottom:12px;">
-          <div class="search-wrap" style="flex:1;">
+      <div class="modal-body" style="padding-bottom:0">
+        <div class="filter-bar" style="margin-bottom:12px">
+          <div class="search-wrap" style="flex:1">
             <span class="search-icon">🔍</span>
-            <input type="text" id="add-product-search" placeholder="Pesquisar…" />
+            <input type="text" id="add-product-search" placeholder="Pesquisar…"/>
           </div>
           <select id="add-product-cat"></select>
         </div>
@@ -227,6 +220,30 @@
       <div class="modal-footer">
         <button class="btn-secondary" data-modal="modal-add-to-lista">Cancelar</button>
         <button id="btn-confirm-add-products" class="btn-primary">Adicionar Seleccionados</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supermercado -->
+  <div id="modal-shop" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="modal-shop-title">Novo Supermercado</h3>
+        <button class="modal-close" data-modal="modal-shop">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>Nome</label>
+        <input type="text" id="shop-name-input" placeholder="Ex: Fresmart"/>
+        <label>Cor (identificação visual)</label>
+        <div class="color-picker-row">
+          <input type="color" id="shop-color-input" value="#2D6A4F"/>
+          <span id="shop-color-preview" class="color-preview"></span>
+        </div>
+        <input type="hidden" id="shop-id-input"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-modal="modal-shop">Cancelar</button>
+        <button id="btn-save-shop" class="btn-primary">Guardar</button>
       </div>
     </div>
   </div>
@@ -240,8 +257,8 @@
       </div>
       <div class="modal-body">
         <label>Nome da Categoria</label>
-        <input type="text" id="cat-name-input" placeholder="Ex: Frutas e Legumes" />
-        <input type="hidden" id="cat-id-input" />
+        <input type="text" id="cat-name-input" placeholder="Ex: Frutas e Legumes"/>
+        <input type="hidden" id="cat-id-input"/>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-modal="modal-category">Cancelar</button>
@@ -259,9 +276,9 @@
       </div>
       <div class="modal-body">
         <label>Nome do Produto</label>
-        <input type="text" id="item-name-input" placeholder="Ex: Banana de Mesa Kg" />
+        <input type="text" id="item-name-input" placeholder="Ex: Banana de Mesa Kg"/>
         <label>Quantidade Padrão</label>
-        <input type="number" id="item-qty-input" placeholder="1" min="0" step="0.01" />
+        <input type="number" id="item-qty-input"   placeholder="1"  min="0" step="0.01"/>
         <label>Unidade</label>
         <select id="item-unit-input">
           <option value="un">un</option><option value="kg">kg</option>
@@ -270,13 +287,13 @@
           <option value="pack">pack</option><option value="dz">dz</option>
         </select>
         <label>Preço estimado (Kz)</label>
-        <input type="number" id="item-preco-input" placeholder="0" min="0" step="1" />
+        <input type="number" id="item-preco-input" placeholder="0"  min="0" step="1"/>
         <label>Supermercado sugerido</label>
-        <input type="text" id="item-shop-input" placeholder="Ex: Fresmart" />
+        <select id="item-shop-input"><option value="">— Nenhum —</option></select>
         <label>Categoria</label>
         <select id="item-cat-input"></select>
-        <input type="hidden" id="item-id-input" />
-        <input type="hidden" id="item-original-cat-input" />
+        <input type="hidden" id="item-id-input"/>
+        <input type="hidden" id="item-original-cat-input"/>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-modal="modal-item">Cancelar</button>

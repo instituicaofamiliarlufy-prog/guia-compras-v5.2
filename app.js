@@ -1,46 +1,46 @@
-// app.js — Guia de Compras v5.4
+// app.js — Guia de Compras v5.5
+// Arquitectura: listas guardam apenas referências (catId, itemIdx, qty, checked)
+// Os dados do produto (name, unit, preco, bestShopId) são lidos do catálogo em runtime.
 import { db } from "./firebase.js";
-import { defaultCatalog } from "./data-default.js";
+import { defaultCatalog, defaultSupermercados } from "./data-default.js";
 import {
   collection, doc, getDoc, getDocs,
-  setDoc, updateDoc, deleteDoc, onSnapshot
+  setDoc, updateDoc, deleteDoc, onSnapshot, deleteField
 } from "./firebase.js";
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // STATE
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 const state = {
-  catalog:        {},
+  catalog:        {},   // { catId: { nome, items:[{name,defaultQty,unit,preco,bestShopId}] } }
+  supermercados:  {},   // { shopId: { nome, cor } }
   allListas:      [],
-  currentLista:   null,
+  currentLista:   null, // raw Firestore doc { date, nome, supermercado, items:{itemKey:{catId,itemIdx,qty,checked}} }
   currentListaId: null,
   unsubLista:     null,
+  unsubCatalog:   null, // realtime catalog listener while lista view is open
   pendingDelete:  null,
-  addProductSel:  new Set(), // selections in add-product modal
+  addProductSel:  new Set(),
 };
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // UTILITIES
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function todayStr() { return new Date().toISOString().split("T")[0]; }
-
 function formatDatePT(s) {
   if (!s) return "";
   const [y, m, d] = s.split("-");
   return `${d}/${m}/${y}`;
 }
-
 function slugify(t) {
   return t.trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
+// Stable item key from catId + index stored in lista
+function itemKey(catId, itemIdx) { return `${catId}__${itemIdx}`; }
 
-function generateItemId(catId, name) { return `${catId}_${slugify(name)}`; }
-
-function fmtKz(val) {
-  return "Kz " + Math.round(val).toLocaleString("pt-AO");
-}
+function fmtKz(v) { return "Kz " + Math.round(v).toLocaleString("pt-AO"); }
 
 function showToast(msg, type = "default") {
   const t = document.getElementById("toast");
@@ -49,102 +49,105 @@ function showToast(msg, type = "default") {
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.className = "toast"; }, 3200);
 }
-
 function openModal(id)  { document.getElementById(id).classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 
-// ── Auto name generation ─────────────────────
-const PT_DAYS  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+// ── Resolve item data from catalog ─────────────────
+// listaItem: { catId, itemIdx, qty, checked }
+// Returns merged object with catalog data, or null if not found.
+function resolveItem(listaItem) {
+  const catData = state.catalog[listaItem.catId];
+  if (!catData) return null;
+  const catalogItem = catData.items[listaItem.itemIdx];
+  if (!catalogItem) return null;
+  const shop = listaItem.bestShopId
+    ? state.supermercados[listaItem.bestShopId]
+    : state.supermercados[catalogItem.bestShopId];
+  return {
+    ...catalogItem,
+    catId:       listaItem.catId,
+    itemIdx:     listaItem.itemIdx,
+    qty:         listaItem.qty ?? catalogItem.defaultQty,
+    checked:     listaItem.checked ?? false,
+    categoria:   catData.nome,
+    shopNome:    shop?.nome  || "",
+    shopCor:     shop?.cor   || "#888",
+    shopId:      catalogItem.bestShopId || "",
+  };
+}
+
+// ── Auto name ──────────────────────────────────────
+const PT_DAYS   = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 const PT_MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
                    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-
 function generateListaName(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   const base = `Compras ${PT_DAYS[d.getDay()]} ${d.getDate()} de ${PT_MONTHS[d.getMonth()]}`;
-  // Count existing with same date
-  const sameDate = state.allListas.filter(l => l.date === dateStr);
-  const names = sameDate.map(l => l.nome);
+  const names = state.allListas.filter(l => l.date === dateStr).map(l => l.nome);
   if (!names.includes(base)) return base;
   let n = 2;
   while (names.includes(`${base} #${n}`)) n++;
   return `${base} #${n}`;
 }
 
-// ── Shop distribution ───────────────────────
-function calcShopDistribution(selections) {
-  // Returns { shopName: totalValue } sorted desc
+// ── Shop distribution (by value) ───────────────────
+const SHOP_COLORS_FALLBACK = ["#2D6A4F","#E07A5F","#C9A84C","#5B7FA6","#8E6BBF","#3D9970","#E8743B","#708090"];
+function calcShopDist(selections) {
   const totals = {};
   selections.forEach(key => {
     const [catId, idxStr] = key.split("|");
     const catData = state.catalog[catId]; if (!catData) return;
-    const item = catData.items[parseInt(idxStr)]; if (!item) return;
-    const shop = item.bestShop || "Outro";
-    const val  = (item.preco || 0) * (item.defaultQty || 1);
-    totals[shop] = (totals[shop] || 0) + val;
+    const item    = catData.items[parseInt(idxStr)]; if (!item) return;
+    const shopId  = item.bestShopId || "outro";
+    const shop    = state.supermercados[shopId];
+    const label   = shop?.nome || shopId;
+    const cor     = shop?.cor  || "#888";
+    const val     = (item.preco || 0) * (item.defaultQty || 1);
+    if (!totals[label]) totals[label] = { val: 0, cor };
+    totals[label].val += val;
   });
-  return totals;
+  return totals; // { label: { val, cor } }
 }
-
 function topShop(dist) {
   let top = "", topVal = 0;
-  Object.entries(dist).forEach(([s, v]) => { if (v > topVal) { top = s; topVal = v; } });
+  Object.entries(dist).forEach(([s, d]) => { if (d.val > topVal) { top = s; topVal = d.val; } });
   return top;
 }
-
-const SHOP_COLORS = [
-  "#2D6A4F","#E07A5F","#C9A84C","#5B7FA6","#8E6BBF",
-  "#3D9970","#E8743B","#6495ED","#BC8C4C","#708090"
-];
-
 function renderShopDist(dist) {
-  const total = Object.values(dist).reduce((a, b) => a + b, 0);
-  if (!total) { document.getElementById("gerar-shop-dist").classList.add("hidden"); return; }
-  document.getElementById("gerar-shop-dist").classList.remove("hidden");
+  const total = Object.values(dist).reduce((a, d) => a + d.val, 0);
+  const el = document.getElementById("gerar-shop-dist");
+  if (!total) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  const sorted = Object.entries(dist).sort((a, b) => b[1].val - a[1].val);
+  document.getElementById("shop-dist-bars").innerHTML = sorted.map(([, d]) => {
+    const pct = (d.val / total) * 100;
+    return `<div class="dist-seg" style="width:${pct}%;background:${d.cor}" title="${pct.toFixed(0)}%"></div>`;
+  }).join("");
+  document.getElementById("shop-dist-legend").innerHTML = sorted.map(([label, d]) => {
+    const pct = (d.val / total) * 100;
+    return `<div class="dist-leg-item"><span class="dist-dot" style="background:${d.cor}"></span>${label} <strong>${pct.toFixed(0)}%</strong></div>`;
+  }).join("");
+}
 
-  const sorted = Object.entries(dist).sort((a, b) => b[1] - a[1]);
-  const barsEl  = document.getElementById("shop-dist-bars");
-  const legendEl = document.getElementById("shop-dist-legend");
-  barsEl.innerHTML = "";
-  legendEl.innerHTML = "";
-
-  sorted.forEach(([shop, val], i) => {
-    const pct = (val / total) * 100;
-    const color = SHOP_COLORS[i % SHOP_COLORS.length];
-    const seg = document.createElement("div");
-    seg.className = "dist-seg";
-    seg.style.cssText = `width:${pct}%;background:${color};`;
-    seg.title = `${shop}: ${fmtKz(val)} (${pct.toFixed(0)}%)`;
-    barsEl.appendChild(seg);
-
-    const leg = document.createElement("div");
-    leg.className = "dist-leg-item";
-    leg.innerHTML = `<span class="dist-dot" style="background:${color}"></span>${shop} <strong>${pct.toFixed(0)}%</strong>`;
-    legendEl.appendChild(leg);
+function calcBudgetFromLista(listaItems) {
+  let total = 0;
+  Object.values(listaItems || {}).forEach(listaItem => {
+    const resolved = resolveItem(listaItem);
+    if (resolved) total += (resolved.qty || 0) * (resolved.preco || 0);
   });
+  return total;
 }
 
-// ── Budget calculation ──────────────────────
-function calcBudget(items) {
-  // items: object { itemId: { qty, preco, ... } } OR array of item objects
-  const arr = Array.isArray(items) ? items : Object.values(items);
-  return arr.reduce((sum, it) => sum + (it.qty || it.defaultQty || 0) * (it.preco || 0), 0);
-}
-
-function getShopsFromCatalog() {
-  const shops = new Set();
-  Object.values(state.catalog).forEach(cat =>
-    (cat.items || []).forEach(it => { if (it.bestShop) shops.add(it.bestShop); })
-  );
-  return [...shops].sort();
-}
-
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // NAVIGATION
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 const views = { listas:"view-listas", lista:"view-lista", gerar:"view-gerar", admin:"view-admin" };
 
 function switchView(name, param) {
-  if (state.unsubLista) { state.unsubLista(); state.unsubLista = null; }
+  // Stop realtime listeners
+  if (state.unsubLista)   { state.unsubLista();   state.unsubLista   = null; }
+  if (state.unsubCatalog) { state.unsubCatalog(); state.unsubCatalog = null; }
+
   Object.values(views).forEach(id => {
     document.getElementById(id).classList.add("hidden");
     document.getElementById(id).classList.remove("active");
@@ -154,6 +157,7 @@ function switchView(name, param) {
   document.getElementById(views[name]).classList.add("active");
   const nb = document.querySelector(`[data-view="${name}"]`);
   if (nb) nb.classList.add("active");
+
   if (name === "listas") initListasView();
   if (name === "lista")  initListaView(param);
   if (name === "gerar")  initGerarView();
@@ -168,9 +172,24 @@ document.querySelectorAll(".nav-btn").forEach(btn => {
   });
 });
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// FIRESTORE — SUPERMERCADOS
+// ═══════════════════════════════════════════════════
+async function loadSupermercados() {
+  const snap = await getDocs(collection(db, "supermercados"));
+  state.supermercados = {};
+  snap.forEach(d => { state.supermercados[d.id] = d.data(); });
+}
+async function saveSupermercado(shopId, data) {
+  await setDoc(doc(db, "supermercados", shopId), data);
+}
+async function deleteSupermercado(shopId) {
+  await deleteDoc(doc(db, "supermercados", shopId));
+}
+
+// ═══════════════════════════════════════════════════
 // FIRESTORE — CATALOG
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 async function loadCatalog() {
   const snap = await getDocs(collection(db, "catalogo"));
   state.catalog = {};
@@ -183,9 +202,10 @@ async function deleteCategoryFromFirestore(catId) {
   await deleteDoc(doc(db, "catalogo", catId));
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // FIRESTORE — LISTAS
-// ═══════════════════════════════════════════
+// Items stored as: { catId, itemIdx, qty, checked }
+// ═══════════════════════════════════════════════════
 async function loadAllListas() {
   const snap = await getDocs(collection(db, "listas"));
   state.allListas = [];
@@ -193,48 +213,51 @@ async function loadAllListas() {
     const data = d.data();
     state.allListas.push({
       id:           d.id,
-      date:         data.date || "",
-      nome:         data.nome || "",
+      date:         data.date         || "",
+      nome:         data.nome         || "",
       supermercado: data.supermercado || "",
       itemCount:    data.items ? Object.keys(data.items).length : 0,
-      budget:       data.items ? calcBudget(data.items) : 0,
     });
   });
   state.allListas.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function subscribeToLista(id, cb) {
+function subscribeToLista(listaId, cb) {
   if (state.unsubLista) { state.unsubLista(); state.unsubLista = null; }
-  state.unsubLista = onSnapshot(doc(db, "listas", id), snap => {
+  state.unsubLista = onSnapshot(doc(db, "listas", listaId), snap => {
     cb(snap.exists() ? { id: snap.id, ...snap.data() } : null);
   });
 }
 
-async function updateListaItem(listaId, itemId, fields) {
-  const upd = {};
-  Object.entries(fields).forEach(([k, v]) => { upd[`items.${itemId}.${k}`] = v; });
-  await updateDoc(doc(db, "listas", listaId), upd);
+// Subscribe to catalog changes so lista view auto-updates when products edited
+function subscribeToCatalog(cb) {
+  if (state.unsubCatalog) { state.unsubCatalog(); state.unsubCatalog = null; }
+  state.unsubCatalog = onSnapshot(collection(db, "catalogo"), snap => {
+    state.catalog = {};
+    snap.forEach(d => { state.catalog[d.id] = d.data(); });
+    cb();
+  });
 }
 
-async function removeListaItem(listaId, itemId) {
-  // Firestore: set field to deleteField() via FieldValue — use updateDoc with deleteField
-  const { deleteField } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+async function updateListaItemFields(listaId, key, fields) {
   const upd = {};
-  upd[`items.${itemId}`] = deleteField();
+  Object.entries(fields).forEach(([k, v]) => { upd[`items.${key}.${k}`] = v; });
   await updateDoc(doc(db, "listas", listaId), upd);
 }
-
+async function removeListaItemKey(listaId, key) {
+  const upd = {}; upd[`items.${key}`] = deleteField();
+  await updateDoc(doc(db, "listas", listaId), upd);
+}
 async function saveNewLista(listaDoc) {
   const id = crypto.randomUUID();
   await setDoc(doc(db, "listas", id), listaDoc);
   return id;
 }
-
 async function deleteListaById(id) { await deleteDoc(doc(db, "listas", id)); }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // SEED
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 async function seedCatalog() {
   const btn = document.getElementById("btn-seed");
   btn.disabled = true; btn.textContent = "A carregar…";
@@ -247,10 +270,22 @@ async function seedCatalog() {
   } catch (e) { console.error(e); showToast("Erro ao carregar.", "error"); }
   finally { btn.disabled = false; btn.textContent = "🌱 Seed Padrão"; }
 }
+async function seedSupermercados() {
+  const btn = document.getElementById("btn-seed-shops");
+  btn.disabled = true; btn.textContent = "A carregar…";
+  try {
+    for (const shop of defaultSupermercados) {
+      await saveSupermercado(shop.id, { nome: shop.nome, cor: shop.cor });
+    }
+    await loadSupermercados(); renderAdminShops(); populateShopSelects();
+    showToast("Supermercados carregados!", "success");
+  } catch (e) { console.error(e); showToast("Erro.", "error"); }
+  finally { btn.disabled = false; btn.textContent = "🌱 Seed Supermercados"; }
+}
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // SHARED SELECTS
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function populateCategorySelects() {
   const cats = Object.entries(state.catalog).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
   ["admin-cat-filter", "gerar-cat-filter"].forEach(id => {
@@ -266,19 +301,35 @@ function populateCategorySelects() {
     cats.map(([id, c]) => `<option value="${id}">${c.nome}</option>`).join("");
 }
 
-function populateShopFilter(selId) {
-  const sel = document.getElementById(selId); if (!sel) return;
-  const val = sel.value, shops = getShopsFromCatalog();
-  sel.innerHTML = '<option value="">Todos os supermercados</option>' +
-    shops.map(s => `<option value="${s}">${s}</option>`).join("");
-  sel.value = val;
+function populateShopSelects() {
+  const shops = Object.entries(state.supermercados).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+  // Item modal shop select
+  const itemShopSel = document.getElementById("item-shop-input");
+  const itemShopVal = itemShopSel.value;
+  itemShopSel.innerHTML = '<option value="">— Nenhum —</option>' +
+    shops.map(([id, s]) => `<option value="${id}">${s.nome}</option>`).join("");
+  itemShopSel.value = itemShopVal;
+
+  // Gerar shop filter
+  const gerarShopSel = document.getElementById("gerar-shop-filter");
+  const gerarShopVal = gerarShopSel.value;
+  gerarShopSel.innerHTML = '<option value="">Todos os supermercados</option>' +
+    shops.map(([id, s]) => `<option value="${id}">${s.nome}</option>`).join("");
+  gerarShopSel.value = gerarShopVal;
+
+  // Lista shop filter
+  const listaShopSel = document.getElementById("lista-shop-filter");
+  const listaShopVal = listaShopSel.value;
+  listaShopSel.innerHTML = '<option value="">Todos os supermercados</option>' +
+    shops.map(([id, s]) => `<option value="${id}">${s.nome}</option>`).join("");
+  listaShopSel.value = listaShopVal;
 }
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // VIEW: LISTAGEM
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 async function initListasView() {
-  await loadAllListas();
+  await Promise.all([loadAllListas(), loadCatalog(), loadSupermercados()]);
   renderListasGrid();
 }
 
@@ -291,39 +342,28 @@ function renderListasGrid() {
     return;
   }
   const byDate = {};
-  state.allListas.forEach(l => {
-    if (!byDate[l.date]) byDate[l.date] = [];
-    byDate[l.date].push(l);
-  });
+  state.allListas.forEach(l => { if (!byDate[l.date]) byDate[l.date] = []; byDate[l.date].push(l); });
   Object.entries(byDate).sort((a, b) => b[0].localeCompare(a[0])).forEach(([date, listas]) => {
-    const group = document.createElement("div");
-    group.className = "listas-date-group";
+    const group = document.createElement("div"); group.className = "listas-date-group";
     group.innerHTML = `<div class="listas-date-label">📅 ${formatDatePT(date)}</div>`;
     listas.forEach(lista => {
-      const card = document.createElement("div");
-      card.className = "lista-card";
+      const card = document.createElement("div"); card.className = "lista-card";
       card.innerHTML = `
         <div class="lista-card-body" data-id="${lista.id}">
           <div class="lista-card-top">
             <span class="lista-card-nome">${lista.nome || "Lista sem nome"}</span>
             ${lista.supermercado ? `<span class="lista-card-shop">🛍️ ${lista.supermercado}</span>` : ""}
           </div>
-          <div class="lista-card-meta">
-            ${lista.itemCount} produtos
-            ${lista.budget > 0 ? `· <strong>${fmtKz(lista.budget)}</strong>` : ""}
-          </div>
+          <div class="lista-card-meta">${lista.itemCount} produtos</div>
         </div>
         <div class="lista-card-actions">
-          <button class="btn-icon" title="Partilhar" data-action="share" data-id="${lista.id}">🔗</button>
-          <button class="btn-icon" title="Editar" data-action="edit-lista" data-id="${lista.id}">✏️</button>
+          <button class="btn-icon" title="Partilhar" data-action="share"       data-id="${lista.id}">🔗</button>
+          <button class="btn-icon" title="Editar"    data-action="edit-lista"   data-id="${lista.id}">✏️</button>
           <button class="btn-icon danger" title="Apagar" data-action="delete-lista" data-id="${lista.id}">🗑️</button>
         </div>`;
       card.querySelector(".lista-card-body").addEventListener("click", () => switchView("lista", lista.id));
       card.querySelectorAll("[data-action]").forEach(btn => {
-        btn.addEventListener("click", e => {
-          e.stopPropagation();
-          handleListaCardAction(btn.dataset.action, btn.dataset.id);
-        });
+        btn.addEventListener("click", e => { e.stopPropagation(); handleListaCardAction(btn.dataset.action, btn.dataset.id); });
       });
       group.appendChild(card);
     });
@@ -337,10 +377,9 @@ function shareUrl(listaId) {
 
 function handleListaCardAction(action, listaId) {
   if (action === "share") {
-    const url = shareUrl(listaId);
-    navigator.clipboard.writeText(url)
+    navigator.clipboard.writeText(shareUrl(listaId))
       .then(() => showToast("Link copiado!", "success"))
-      .catch(() => prompt("Copia este link:", url));
+      .catch(() => prompt("Copia este link:", shareUrl(listaId)));
   }
   if (action === "edit-lista")   openEditListaModal(listaId);
   if (action === "delete-lista") confirmDeleteLista(listaId);
@@ -354,7 +393,6 @@ async function openEditListaModal(listaId) {
   document.getElementById("edit-lista-shop").value = lista.supermercado || "";
   openModal("modal-edit-lista");
 }
-
 document.getElementById("btn-save-edit-lista").addEventListener("click", async () => {
   const id   = document.getElementById("edit-lista-id").value;
   const nome = document.getElementById("edit-lista-nome").value.trim();
@@ -364,8 +402,7 @@ document.getElementById("btn-save-edit-lista").addEventListener("click", async (
   if (!date) return showToast("Seleccione uma data.", "error");
   try {
     await updateDoc(doc(db, "listas", id), { nome, date, supermercado: shop });
-    closeModal("modal-edit-lista");
-    showToast("Lista actualizada!", "success");
+    closeModal("modal-edit-lista"); showToast("Lista actualizada!", "success");
     await loadAllListas(); renderListasGrid();
   } catch (e) { console.error(e); showToast("Erro.", "error"); }
 });
@@ -378,12 +415,14 @@ function confirmDeleteLista(listaId) {
   openModal("modal-confirm");
 }
 
-// ═══════════════════════════════════════════
-// VIEW: LISTA DETALHE
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// VIEW: LISTA DETALHE (realtime catalog + lista)
+// ═══════════════════════════════════════════════════
 async function initListaView(listaId) {
   if (!listaId) { switchView("listas"); return; }
   state.currentListaId = listaId;
+  state.currentLista   = null;
+
   document.getElementById("lista-loading").classList.remove("hidden");
   document.getElementById("lista-empty").classList.add("hidden");
   document.getElementById("lista-content").classList.add("hidden");
@@ -392,9 +431,18 @@ async function initListaView(listaId) {
   document.getElementById("lista-search").value = "";
   document.getElementById("lista-shop-filter").value = "";
 
-  await loadCatalog();
-  populateShopFilter("lista-shop-filter");
+  // Load shops once (they rarely change)
+  await loadSupermercados();
+  populateShopSelects();
 
+  // Subscribe to catalog changes → re-render lista
+  subscribeToCatalog(() => {
+    populateCategorySelects();
+    populateShopSelects();
+    if (state.currentLista) renderLista(state.currentLista);
+  });
+
+  // Subscribe to lista changes
   subscribeToLista(listaId, listaData => {
     document.getElementById("lista-loading").classList.add("hidden");
     if (!listaData) {
@@ -412,17 +460,18 @@ async function initListaView(listaId) {
 function getListaFilters() {
   return {
     search: document.getElementById("lista-search").value.toLowerCase().trim(),
-    shop:   document.getElementById("lista-shop-filter").value,
+    shopId: document.getElementById("lista-shop-filter").value,
     sort:   document.getElementById("lista-sort").value,
   };
 }
 
 function renderLista(listaData) {
-  const { search, shop, sort } = getListaFilters();
+  const { search, shopId, sort } = getListaFilters();
   const container = document.getElementById("lista-content");
   container.innerHTML = "";
 
-  if (!listaData?.items || !Object.keys(listaData.items).length) {
+  const rawItems = listaData?.items || {};
+  if (!Object.keys(rawItems).length) {
     document.getElementById("lista-empty").classList.remove("hidden");
     container.classList.add("hidden");
     document.getElementById("lista-budget").classList.add("hidden");
@@ -434,53 +483,69 @@ function renderLista(listaData) {
   document.getElementById("lista-summary").classList.remove("hidden");
   document.getElementById("lista-budget").classList.remove("hidden");
 
-  // Budget
-  const budgetVal = calcBudget(listaData.items);
-  document.getElementById("budget-total").textContent = fmtKz(budgetVal);
+  // Resolve all items from catalog
+  const resolved = [];
+  Object.entries(rawItems).forEach(([key, listaItem]) => {
+    // Support legacy items (had name/unit/preco copied)
+    let r;
+    if (listaItem.catId !== undefined && listaItem.itemIdx !== undefined) {
+      r = resolveItem(listaItem);
+      if (r) r._key = key;
+    } else {
+      // Legacy fallback: use stored data directly
+      r = { ...listaItem, _key: key, categoria: listaItem.categoria || "Sem categoria",
+             shopNome: listaItem.bestShop || "", shopCor: "#888", shopId: "" };
+    }
+    if (!r) return;
 
-  // Filter
-  let entries = Object.entries(listaData.items).filter(([, item]) =>
-    (!search || item.name.toLowerCase().includes(search)) &&
-    (!shop   || item.bestShop === shop)
-  );
+    // Filter
+    const matchSearch = !search || r.name.toLowerCase().includes(search);
+    const matchShop   = !shopId || r.shopId === shopId;
+    if (matchSearch && matchShop) resolved.push(r);
+  });
+
+  // Budget (all items, not just filtered)
+  const budgetVal = calcBudgetFromLista(rawItems);
+  document.getElementById("budget-total").textContent = fmtKz(budgetVal);
 
   // Group
   const byGroup = {};
-  entries.forEach(([itemId, item]) => {
-    const key = sort === "supermercado"
-      ? (item.bestShop || "Sem supermercado")
-      : (item.categoria || "Sem categoria");
+  resolved.forEach(r => {
+    const key = sort === "supermercado" ? (r.shopNome || "Sem supermercado") : (r.categoria || "Sem categoria");
     if (!byGroup[key]) byGroup[key] = [];
-    byGroup[key].push({ itemId, ...item });
+    byGroup[key].push(r);
   });
 
   Object.entries(byGroup).sort((a, b) => a[0].localeCompare(b[0])).forEach(([groupName, items]) => {
-    const group = document.createElement("div");
-    group.className = "lista-category-group";
+    const group = document.createElement("div"); group.className = "lista-category-group";
     const checked = items.filter(i => i.checked).length;
-    group.innerHTML = `<div class="lista-cat-header"><h3>${groupName}</h3><span class="cat-badge">${checked}/${items.length}</span></div>`;
+    group.innerHTML = `<div class="lista-cat-header">
+      <h3>${groupName}</h3>
+      <span class="cat-badge">${checked}/${items.length}</span>
+    </div>`;
 
     items.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
       const row = document.createElement("div");
       row.className = `lista-item${item.checked ? " checked" : ""}`;
       const lineTotal = (item.qty || 0) * (item.preco || 0);
+      const shopDot   = item.shopCor ? `<span class="shop-dot" style="background:${item.shopCor}"></span>` : "";
       row.innerHTML = `
-        <input type="checkbox" class="item-checkbox" ${item.checked ? "checked" : ""} />
+        <input type="checkbox" class="item-checkbox" ${item.checked ? "checked" : ""}/>
         <div class="item-info">
           <span class="item-name">${item.name}</span>
-          ${item.bestShop ? `<span class="item-shop-tag">${item.bestShop}</span>` : ""}
+          ${item.shopNome ? `<span class="item-shop-tag">${shopDot}${item.shopNome}</span>` : ""}
         </div>
         <div class="item-qty-wrap">
-          <input type="number" class="item-qty-input" value="${item.qty}" min="0" step="0.1" />
+          <input type="number" class="item-qty-input" value="${item.qty ?? item.defaultQty}" min="0" step="0.1"/>
           <span class="item-unit">${item.unit}</span>
         </div>
         ${item.preco ? `<span class="item-line-total">${fmtKz(lineTotal)}</span>` : ""}
-        <button class="btn-icon btn-remove-item danger" title="Remover da lista" data-itemid="${item.itemId}">✕</button>`;
+        <button class="btn-icon btn-remove-item danger" title="Remover" data-key="${item._key}">✕</button>`;
 
       const cb = row.querySelector(".item-checkbox");
       cb.addEventListener("change", async () => {
         row.classList.toggle("checked", cb.checked);
-        await updateListaItem(listaData.id, item.itemId, { checked: cb.checked });
+        await updateListaItemFields(listaData.id, item._key, { checked: cb.checked });
       });
 
       const qi = row.querySelector(".item-qty-input");
@@ -489,8 +554,7 @@ function renderLista(listaData) {
         clearTimeout(timer);
         timer = setTimeout(async () => {
           const qty = parseFloat(qi.value) || 0;
-          await updateListaItem(listaData.id, item.itemId, { qty });
-          // Update line total immediately
+          await updateListaItemFields(listaData.id, item._key, { qty });
           const lt = row.querySelector(".item-line-total");
           if (lt) lt.textContent = fmtKz(qty * (item.preco || 0));
         }, 500);
@@ -498,7 +562,7 @@ function renderLista(listaData) {
 
       row.querySelector(".btn-remove-item").addEventListener("click", async () => {
         if (!confirm(`Remover "${item.name}" da lista?`)) return;
-        await removeListaItem(listaData.id, item.itemId);
+        await removeListaItemKey(listaData.id, item._key);
       });
 
       group.appendChild(row);
@@ -506,28 +570,30 @@ function renderLista(listaData) {
     container.appendChild(group);
   });
 
-  updateListaSummary(listaData);
+  updateListaSummary(rawItems);
 }
 
-function updateListaSummary(listaData) {
-  const all = Object.values(listaData.items);
+function updateListaSummary(rawItems) {
+  const all = Object.values(rawItems);
   const checked = all.filter(i => i.checked).length, total = all.length;
   document.getElementById("summary-checked").textContent = checked;
   document.getElementById("summary-total").textContent   = total;
   document.getElementById("progress-fill").style.width   = `${total ? (checked / total) * 100 : 0}%`;
 }
 
-document.getElementById("lista-search").addEventListener("input", () => { if (state.currentLista) renderLista(state.currentLista); });
+// Lista filters
+document.getElementById("lista-search").addEventListener("input",      () => { if (state.currentLista) renderLista(state.currentLista); });
 document.getElementById("lista-shop-filter").addEventListener("change", () => { if (state.currentLista) renderLista(state.currentLista); });
-document.getElementById("lista-sort").addEventListener("change", () => { if (state.currentLista) renderLista(state.currentLista); });
-document.getElementById("btn-back-listas").addEventListener("click", () => switchView("listas"));
+document.getElementById("lista-sort").addEventListener("change",        () => { if (state.currentLista) renderLista(state.currentLista); });
+document.getElementById("btn-back-listas").addEventListener("click",    () => switchView("listas"));
 document.getElementById("btn-share-lista").addEventListener("click", () => {
   if (!state.currentListaId) return;
-  const url = shareUrl(state.currentListaId);
-  navigator.clipboard.writeText(url).then(() => showToast("Link copiado!", "success")).catch(() => prompt("Copia:", url));
+  navigator.clipboard.writeText(shareUrl(state.currentListaId))
+    .then(() => showToast("Link copiado!", "success"))
+    .catch(() => prompt("Copia:", shareUrl(state.currentListaId)));
 });
 
-// ── Add product to existing lista ────────────
+// ── Add product to existing lista ───────────────────
 document.getElementById("btn-add-to-lista").addEventListener("click", () => {
   state.addProductSel.clear();
   document.getElementById("add-product-search").value = "";
@@ -542,7 +608,8 @@ function renderAddProductList() {
   const container = document.getElementById("add-product-list");
   container.innerHTML = "";
 
-  const existingIds = new Set(
+  // Keys already in lista
+  const existingKeys = new Set(
     state.currentLista ? Object.keys(state.currentLista.items || {}) : []
   );
 
@@ -553,27 +620,29 @@ function renderAddProductList() {
   cats.forEach(([catId, catData]) => {
     const items = catData.items
       .map((item, i) => ({ item, i }))
-      .filter(({ item, i }) => {
-        const itemId = generateItemId(catId, item.name);
-        return !existingIds.has(itemId) &&
-          (!search || item.name.toLowerCase().includes(search));
+      .filter(({ i }) => {
+        const key = itemKey(catId, i);
+        return !existingKeys.has(key) && (!search || catData.items[i].name.toLowerCase().includes(search));
       });
     if (!items.length) return;
 
-    const groupEl = document.createElement("div");
-    groupEl.className = "add-product-group";
+    const groupEl = document.createElement("div"); groupEl.className = "add-product-group";
     groupEl.innerHTML = `<div class="add-product-cat-label">${catData.nome}</div>`;
-
     items.forEach(({ item, i }) => {
-      const key    = `${catId}|${i}`;
-      const isSel  = state.addProductSel.has(key);
-      const row    = document.createElement("div");
+      const key   = `${catId}|${i}`;
+      const isSel = state.addProductSel.has(key);
+      const shop  = state.supermercados[item.bestShopId];
+      const row   = document.createElement("div");
       row.className = `add-product-row${isSel ? " selected" : ""}`;
       row.innerHTML = `
-        <input type="checkbox" ${isSel ? "checked" : ""} data-key="${key}" />
+        <input type="checkbox" ${isSel ? "checked" : ""} data-key="${key}"/>
         <div class="add-product-info">
           <span class="add-product-name">${item.name}</span>
-          <span class="add-product-meta">${item.defaultQty} ${item.unit}${item.bestShop ? ` · ${item.bestShop}` : ""}${item.preco ? ` · ${fmtKz(item.preco)}` : ""}</span>
+          <span class="add-product-meta">
+            ${item.defaultQty} ${item.unit}
+            ${shop    ? `· <span style="color:${shop.cor};font-weight:600">${shop.nome}</span>` : ""}
+            ${item.preco ? `· ${fmtKz(item.preco)}` : ""}
+          </span>
         </div>`;
       const cb = row.querySelector("input");
       const toggle = () => {
@@ -588,12 +657,12 @@ function renderAddProductList() {
   });
 
   if (!container.children.length) {
-    container.innerHTML = `<div class="empty-state" style="padding:30px 0;"><p>Nenhum produto disponível para adicionar.</p></div>`;
+    container.innerHTML = `<div class="empty-state" style="padding:30px 0"><p>Sem produtos disponíveis.</p></div>`;
   }
 }
 
-document.getElementById("add-product-search").addEventListener("input", renderAddProductList);
-document.getElementById("add-product-cat").addEventListener("change", renderAddProductList);
+document.getElementById("add-product-search").addEventListener("input",  renderAddProductList);
+document.getElementById("add-product-cat").addEventListener("change",     renderAddProductList);
 
 document.getElementById("btn-confirm-add-products").addEventListener("click", async () => {
   if (!state.addProductSel.size) return showToast("Seleccione pelo menos um produto.", "error");
@@ -601,18 +670,11 @@ document.getElementById("btn-confirm-add-products").addEventListener("click", as
   const upd = {};
   state.addProductSel.forEach(key => {
     const [catId, idxStr] = key.split("|");
+    const idx = parseInt(idxStr);
     const catData = state.catalog[catId]; if (!catData) return;
-    const item    = catData.items[parseInt(idxStr)]; if (!item) return;
-    const itemId  = generateItemId(catId, item.name);
-    upd[`items.${itemId}`] = {
-      name:      item.name,
-      qty:       item.defaultQty,
-      unit:      item.unit,
-      checked:   false,
-      categoria: catData.nome,
-      bestShop:  item.bestShop || "",
-      preco:     item.preco || 0,
-    };
+    const item    = catData.items[idx];   if (!item)    return;
+    const k = itemKey(catId, idx);
+    upd[`items.${k}`] = { catId, itemIdx: idx, qty: item.defaultQty, checked: false };
   });
   try {
     await updateDoc(doc(db, "listas", state.currentListaId), upd);
@@ -622,19 +684,15 @@ document.getElementById("btn-confirm-add-products").addEventListener("click", as
   } catch (e) { console.error(e); showToast("Erro ao adicionar.", "error"); }
 });
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // VIEW: GERAR
-// ═══════════════════════════════════════════
-let gerarSelections = new Set();
+// ═══════════════════════════════════════════════════
+let gerarSelections = new Set(); // "catId|itemIdx"
 
 async function initGerarView() {
-  await loadCatalog();
-  populateCategorySelects();
-  populateShopFilter("gerar-shop-filter");
-  gerarSelections.clear();
-  updateGerarCount();
-  updateGerarBudget();
-
+  await Promise.all([loadCatalog(), loadSupermercados()]);
+  populateCategorySelects(); populateShopSelects();
+  gerarSelections.clear(); updateGerarCount(); updateGerarBudget();
   const input = document.getElementById("gerar-date");
   input.value = todayStr(); input.min = todayStr();
   document.getElementById("gerar-nome").value = "";
@@ -648,12 +706,12 @@ function getGerarFilters() {
   return {
     search: document.getElementById("gerar-search").value.toLowerCase().trim(),
     cat:    document.getElementById("gerar-cat-filter").value,
-    shop:   document.getElementById("gerar-shop-filter").value,
+    shopId: document.getElementById("gerar-shop-filter").value,
   };
 }
 
 function renderGerarCatalog() {
-  const { search, cat, shop } = getGerarFilters();
+  const { search, cat, shopId } = getGerarFilters();
   const container = document.getElementById("gerar-catalog");
   container.innerHTML = "";
   const cats = Object.entries(state.catalog)
@@ -669,7 +727,7 @@ function renderGerarCatalog() {
     const filteredItems = catData.items.map((item, i) => ({ item, i }))
       .filter(({ item }) =>
         (!search || item.name.toLowerCase().includes(search)) &&
-        (!shop   || item.bestShop === shop)
+        (!shopId || item.bestShopId === shopId)
       );
     if (!filteredItems.length) return;
 
@@ -686,42 +744,37 @@ function renderGerarCatalog() {
     filteredItems.forEach(({ item, i }) => {
       const key   = `${catId}|${i}`;
       const isSel = gerarSelections.has(key);
+      const shop  = state.supermercados[item.bestShopId];
       const el    = document.createElement("div");
       el.className = `gerar-item${isSel ? " selected" : ""}`;
       el.innerHTML = `
-        <input type="checkbox" ${isSel ? "checked" : ""} data-key="${key}" />
+        <input type="checkbox" ${isSel ? "checked" : ""} data-key="${key}"/>
         <div class="gerar-item-info">
           <div class="gerar-item-name">${item.name}</div>
           <div class="gerar-item-meta">
             ${item.defaultQty} ${item.unit}
-            ${item.bestShop ? `· <span class="shop-pill">${item.bestShop}</span>` : ""}
-            ${item.preco    ? `· <span class="price-pill">${fmtKz(item.preco)}</span>` : ""}
+            ${shop ? `· <span class="shop-pill" style="background:${shop.cor}20;color:${shop.cor};border:1px solid ${shop.cor}40">${shop.nome}</span>` : ""}
+            ${item.preco ? `· <span class="price-pill">${fmtKz(item.preco)}</span>` : ""}
           </div>
         </div>`;
       const cb = el.querySelector("input");
       const toggle = () => {
         if (cb.checked) { gerarSelections.add(key); el.classList.add("selected"); }
         else            { gerarSelections.delete(key); el.classList.remove("selected"); }
-        updateGerarCount();
-        updateSelectAllState();
-        updateGerarBudget();
-        updateShopSuggestion();
+        updateGerarCount(); updateGerarBudget(); updateShopSuggestion();
       };
       cb.addEventListener("change", toggle);
       el.addEventListener("click", e => { if (e.target !== cb) { cb.checked = !cb.checked; toggle(); } });
       grid.appendChild(el);
     });
-
-    group.appendChild(grid);
-    container.appendChild(group);
+    group.appendChild(grid); container.appendChild(group);
   });
   updateSelectAllState();
 }
 
 function updateGerarCount() {
   const n = gerarSelections.size;
-  document.getElementById("gerar-count").textContent =
-    `${n} produto${n !== 1 ? "s" : ""} seleccionado${n !== 1 ? "s" : ""}`;
+  document.getElementById("gerar-count").textContent = `${n} produto${n !== 1 ? "s" : ""} seleccionado${n !== 1 ? "s" : ""}`;
   document.getElementById("btn-create-list").disabled = n === 0;
 }
 
@@ -731,16 +784,15 @@ function updateGerarBudget() {
   let total = 0;
   gerarSelections.forEach(key => {
     const [catId, idxStr] = key.split("|");
-    const catData = state.catalog[catId]; if (!catData) return;
-    const item    = catData.items[parseInt(idxStr)]; if (!item) return;
-    total += (item.preco || 0) * (item.defaultQty || 1);
+    const item = state.catalog[catId]?.items[parseInt(idxStr)];
+    if (item) total += (item.preco || 0) * (item.defaultQty || 1);
   });
   document.getElementById("gerar-budget-total").textContent = fmtKz(total);
   preview.classList.remove("hidden");
 }
 
 function updateShopSuggestion() {
-  const dist = calcShopDistribution(gerarSelections);
+  const dist = calcShopDist(gerarSelections);
   const top  = topShop(dist);
   document.getElementById("gerar-supermercado").value = top;
   renderShopDist(dist);
@@ -762,30 +814,20 @@ document.getElementById("gerar-select-all").addEventListener("change", e => {
   });
   updateGerarCount(); updateGerarBudget(); updateShopSuggestion();
 });
-
-document.getElementById("gerar-search").addEventListener("input", renderGerarCatalog);
-document.getElementById("gerar-cat-filter").addEventListener("change", renderGerarCatalog);
+document.getElementById("gerar-search").addEventListener("input",      renderGerarCatalog);
+document.getElementById("gerar-cat-filter").addEventListener("change",  renderGerarCatalog);
 document.getElementById("gerar-shop-filter").addEventListener("change", renderGerarCatalog);
 document.getElementById("gerar-date").addEventListener("change", e => {
-  if (e.target.value < todayStr()) {
-    e.target.value = todayStr();
-    showToast("Não pode seleccionar data passada.", "error");
-  }
+  if (e.target.value < todayStr()) { e.target.value = todayStr(); showToast("Não pode seleccionar data passada.", "error"); }
 });
 
 document.getElementById("btn-create-list").addEventListener("click", async () => {
   const dateStr = document.getElementById("gerar-date").value;
   let   nome    = document.getElementById("gerar-nome").value.trim();
   const superM  = document.getElementById("gerar-supermercado").value.trim();
-
-  if (!dateStr) return showToast("Seleccione uma data.", "error");
+  if (!dateStr)             return showToast("Seleccione uma data.", "error");
   if (!gerarSelections.size) return showToast("Seleccione pelo menos um produto.", "error");
-
-  // Auto-generate name if blank
-  if (!nome) {
-    await loadAllListas(); // refresh for sequential check
-    nome = generateListaName(dateStr);
-  }
+  if (!nome) { await loadAllListas(); nome = generateListaName(dateStr); }
 
   const btn = document.getElementById("btn-create-list");
   btn.disabled = true; btn.querySelector("span").textContent = "A criar…";
@@ -793,18 +835,12 @@ document.getElementById("btn-create-list").addEventListener("click", async () =>
     const items = {};
     gerarSelections.forEach(key => {
       const [catId, idxStr] = key.split("|");
+      const idx = parseInt(idxStr);
       const catData = state.catalog[catId]; if (!catData) return;
-      const item    = catData.items[parseInt(idxStr)];
-      const itemId  = generateItemId(catId, item.name);
-      items[itemId] = {
-        name:      item.name,
-        qty:       item.defaultQty,
-        unit:      item.unit,
-        checked:   false,
-        categoria: catData.nome,
-        bestShop:  item.bestShop || "",
-        preco:     item.preco    || 0,
-      };
+      const item    = catData.items[idx];   if (!item)    return;
+      const k = itemKey(catId, idx);
+      // Store only reference + user data, NO product data copy
+      items[k] = { catId, itemIdx: idx, qty: item.defaultQty, checked: false };
     });
     const listaId = await saveNewLista({ date: dateStr, nome, supermercado: superM, items });
     showToast(`Lista "${nome}" criada!`, "success");
@@ -815,13 +851,101 @@ document.getElementById("btn-create-list").addEventListener("click", async () =>
   }
 });
 
-// ═══════════════════════════════════════════
-// VIEW: ADMIN
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// VIEW: ADMIN — TABS
+// ═══════════════════════════════════════════════════
 async function initAdminView() {
-  await loadCatalog(); populateCategorySelects(); renderAdminCatalog();
+  await Promise.all([loadCatalog(), loadSupermercados()]);
+  populateCategorySelects(); populateShopSelects();
+  renderAdminCatalog(); renderAdminShops();
 }
 
+document.querySelectorAll(".admin-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".admin-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".admin-tab-panel").forEach(p => p.classList.add("hidden"));
+    tab.classList.add("active");
+    document.getElementById(`admin-tab-${tab.dataset.tab}`).classList.remove("hidden");
+  });
+});
+
+// ── ADMIN: SUPERMERCADOS ────────────────────────────
+function renderAdminShops() {
+  const container = document.getElementById("admin-shops-list");
+  container.innerHTML = "";
+  const shops = Object.entries(state.supermercados).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+  if (!shops.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏪</div>
+      <p>Nenhum supermercado.</p><small>Use "Seed Supermercados" para começar.</small></div>`;
+    return;
+  }
+  shops.forEach(([shopId, shop]) => {
+    const row = document.createElement("div"); row.className = "shop-admin-row";
+    row.innerHTML = `
+      <span class="shop-color-swatch" style="background:${shop.cor}"></span>
+      <span class="shop-admin-nome">${shop.nome}</span>
+      <span class="shop-admin-id">${shopId}</span>
+      <div class="admin-item-actions" style="opacity:1">
+        <button class="btn-icon" data-action="edit-shop"   data-id="${shopId}">✏️</button>
+        <button class="btn-icon danger" data-action="delete-shop" data-id="${shopId}">🗑️</button>
+      </div>`;
+    row.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", handleShopAction));
+    container.appendChild(row);
+  });
+}
+
+function handleShopAction(e) {
+  const action = e.currentTarget.dataset.action;
+  const shopId = e.currentTarget.dataset.id;
+  if (action === "edit-shop")   openEditShopModal(shopId);
+  if (action === "delete-shop") confirmDeleteShop(shopId);
+}
+
+document.getElementById("btn-add-shop").addEventListener("click", () => {
+  document.getElementById("modal-shop-title").textContent = "Novo Supermercado";
+  document.getElementById("shop-name-input").value  = "";
+  document.getElementById("shop-color-input").value = "#2D6A4F";
+  document.getElementById("shop-id-input").value    = "";
+  openModal("modal-shop");
+});
+
+function openEditShopModal(shopId) {
+  const shop = state.supermercados[shopId];
+  document.getElementById("modal-shop-title").textContent = "Editar Supermercado";
+  document.getElementById("shop-name-input").value  = shop.nome;
+  document.getElementById("shop-color-input").value = shop.cor;
+  document.getElementById("shop-id-input").value    = shopId;
+  openModal("modal-shop");
+}
+
+document.getElementById("btn-save-shop").addEventListener("click", async () => {
+  const nome  = document.getElementById("shop-name-input").value.trim();
+  const cor   = document.getElementById("shop-color-input").value;
+  const oldId = document.getElementById("shop-id-input").value;
+  if (!nome) return showToast("Insira o nome.", "error");
+  const newId = slugify(nome);
+  try {
+    if (oldId && oldId !== newId) {
+      await saveSupermercado(newId, { nome, cor });
+      await deleteSupermercado(oldId);
+    } else {
+      await saveSupermercado(newId, { nome, cor });
+    }
+    await loadSupermercados(); renderAdminShops(); populateShopSelects();
+    closeModal("modal-shop"); showToast("Supermercado guardado!", "success");
+  } catch (e) { console.error(e); showToast("Erro.", "error"); }
+});
+
+function confirmDeleteShop(shopId) {
+  state.pendingDelete = { type: "shop", id: shopId };
+  document.getElementById("confirm-message").textContent =
+    `Eliminar o supermercado "${state.supermercados[shopId]?.nome}"?`;
+  openModal("modal-confirm");
+}
+
+document.getElementById("btn-seed-shops").addEventListener("click", seedSupermercados);
+
+// ── ADMIN: CATÁLOGO ────────────────────────────────
 function getAdminFilters() {
   return {
     search: document.getElementById("admin-search").value.toLowerCase().trim(),
@@ -838,7 +962,8 @@ function renderAdminCatalog() {
     .sort((a, b) => a[1].nome.localeCompare(b[1].nome));
 
   if (!cats.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div><p>Nenhuma categoria.</p><small>Use "Seed Padrão".</small></div>`;
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>
+      <p>Nenhuma categoria.</p><small>Use "Seed Padrão".</small></div>`;
     return;
   }
 
@@ -850,20 +975,21 @@ function renderAdminCatalog() {
       <div class="admin-cat-header">
         <h3>${catData.nome}</h3>
         <div class="admin-cat-actions">
-          <button class="btn-icon" data-action="edit-cat" data-cat="${catId}">✏️</button>
+          <button class="btn-icon" data-action="edit-cat"   data-cat="${catId}">✏️</button>
           <button class="btn-icon danger" data-action="delete-cat" data-cat="${catId}">🗑️</button>
         </div>
       </div>
       <div class="admin-items-list">
         ${filteredItems.map(item => {
           const realIdx = catData.items.indexOf(item);
+          const shop    = state.supermercados[item.bestShopId];
           return `<div class="admin-item-row">
             <span class="admin-item-name">${item.name}</span>
             <span class="admin-item-meta">${item.defaultQty} ${item.unit}</span>
-            ${item.preco    ? `<span class="price-pill">${fmtKz(item.preco)}</span>` : ""}
-            ${item.bestShop ? `<span class="shop-pill">${item.bestShop}</span>`       : ""}
+            ${item.preco ? `<span class="price-pill">${fmtKz(item.preco)}</span>` : ""}
+            ${shop ? `<span class="shop-pill" style="background:${shop.cor}20;color:${shop.cor};border:1px solid ${shop.cor}40">${shop.nome}</span>` : ""}
             <div class="admin-item-actions">
-              <button class="btn-icon" data-action="edit-item" data-cat="${catId}" data-idx="${realIdx}">✏️</button>
+              <button class="btn-icon" data-action="edit-item"   data-cat="${catId}" data-idx="${realIdx}">✏️</button>
               <button class="btn-icon danger" data-action="delete-item" data-cat="${catId}" data-idx="${realIdx}">🗑️</button>
             </div>
           </div>`;
@@ -893,16 +1019,14 @@ document.getElementById("btn-add-category").addEventListener("click", () => {
   document.getElementById("cat-id-input").value   = "";
   openModal("modal-category");
 });
-
 function openEditCategoryModal(catId) {
   document.getElementById("modal-cat-title").textContent = "Editar Categoria";
   document.getElementById("cat-name-input").value = state.catalog[catId].nome;
   document.getElementById("cat-id-input").value   = catId;
   openModal("modal-category");
 }
-
 document.getElementById("btn-save-category").addEventListener("click", async () => {
-  const name  = document.getElementById("cat-name-input").value.trim();
+  const name = document.getElementById("cat-name-input").value.trim();
   const oldId = document.getElementById("cat-id-input").value;
   if (!name) return showToast("Insira o nome.", "error");
   const newId = slugify(name);
@@ -920,16 +1044,16 @@ document.getElementById("btn-save-category").addEventListener("click", async () 
 
 function openAddItemModal(catId) {
   document.getElementById("modal-item-title").textContent = "Novo Produto";
-  ["item-name-input", "item-shop-input"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("item-qty-input").value   = "1";
-  document.getElementById("item-unit-input").value  = "un";
-  document.getElementById("item-preco-input").value = "0";
-  document.getElementById("item-cat-input").value   = catId;
-  document.getElementById("item-id-input").value    = "";
+  document.getElementById("item-name-input").value   = "";
+  document.getElementById("item-qty-input").value    = "1";
+  document.getElementById("item-unit-input").value   = "un";
+  document.getElementById("item-preco-input").value  = "0";
+  document.getElementById("item-shop-input").value   = "";
+  document.getElementById("item-cat-input").value    = catId;
+  document.getElementById("item-id-input").value     = "";
   document.getElementById("item-original-cat-input").value = catId;
   openModal("modal-item");
 }
-
 function openEditItemModal(catId, idx) {
   const item = state.catalog[catId].items[idx];
   document.getElementById("modal-item-title").textContent = "Editar Produto";
@@ -937,25 +1061,24 @@ function openEditItemModal(catId, idx) {
   document.getElementById("item-qty-input").value    = item.defaultQty;
   document.getElementById("item-unit-input").value   = item.unit;
   document.getElementById("item-preco-input").value  = item.preco || 0;
-  document.getElementById("item-shop-input").value   = item.bestShop || "";
+  document.getElementById("item-shop-input").value   = item.bestShopId || "";
   document.getElementById("item-cat-input").value    = catId;
   document.getElementById("item-id-input").value     = idx;
   document.getElementById("item-original-cat-input").value = catId;
   openModal("modal-item");
 }
-
 document.getElementById("btn-save-item").addEventListener("click", async () => {
   const name     = document.getElementById("item-name-input").value.trim();
   const qty      = parseFloat(document.getElementById("item-qty-input").value)  || 1;
   const unit     = document.getElementById("item-unit-input").value;
   const preco    = parseFloat(document.getElementById("item-preco-input").value) || 0;
-  const bestShop = document.getElementById("item-shop-input").value.trim();
+  const bestShopId = document.getElementById("item-shop-input").value;
   const catId    = document.getElementById("item-cat-input").value;
   const idxRaw   = document.getElementById("item-id-input").value;
   const origCat  = document.getElementById("item-original-cat-input").value;
   if (!name) return showToast("Insira o nome.", "error");
   try {
-    const newItem = { name, defaultQty: qty, unit, preco, bestShop };
+    const newItem = { name, defaultQty: qty, unit, preco, bestShopId };
     if (idxRaw === "") {
       state.catalog[catId].items.push(newItem);
       await saveCategoryToFirestore(catId, state.catalog[catId]);
@@ -996,6 +1119,10 @@ document.getElementById("btn-confirm-delete").addEventListener("click", async ()
       await deleteListaById(p.id);
       closeModal("modal-confirm"); showToast("Lista eliminada.", "success");
       await loadAllListas(); renderListasGrid();
+    } else if (p.type === "shop") {
+      await deleteSupermercado(p.id);
+      await loadSupermercados(); renderAdminShops(); populateShopSelects();
+      closeModal("modal-confirm"); showToast("Supermercado eliminado.", "success");
     } else if (p.type === "category") {
       await deleteCategoryFromFirestore(p.catId);
       await loadCatalog(); populateCategorySelects(); renderAdminCatalog();
@@ -1009,13 +1136,13 @@ document.getElementById("btn-confirm-delete").addEventListener("click", async ()
   } catch (e) { console.error(e); showToast("Erro.", "error"); }
 });
 
-document.getElementById("admin-search").addEventListener("input", renderAdminCatalog);
-document.getElementById("admin-cat-filter").addEventListener("change", renderAdminCatalog);
-document.getElementById("btn-seed").addEventListener("click", seedCatalog);
+document.getElementById("admin-search").addEventListener("input",      renderAdminCatalog);
+document.getElementById("admin-cat-filter").addEventListener("change",  renderAdminCatalog);
+document.getElementById("btn-seed").addEventListener("click",           seedCatalog);
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // MODAL CLOSE
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 document.querySelectorAll(".modal-close,[data-modal]").forEach(el => {
   el.addEventListener("click", () => closeModal(el.dataset.modal));
 });
@@ -1023,15 +1150,17 @@ document.querySelectorAll(".modal-overlay").forEach(overlay => {
   overlay.addEventListener("click", e => { if (e.target === overlay) closeModal(overlay.id); });
 });
 
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // BOOTSTRAP
-// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 (async () => {
   try {
-    await loadCatalog();
+    await Promise.all([loadCatalog(), loadSupermercados()]);
     switchView("listas");
   } catch (e) {
     console.error("Erro:", e);
-    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;background:#F5F3EE;"><div><div style="font-size:3rem">🔥</div><h2>${e.message}</h2></div></div>`;
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;background:#F5F3EE">
+      <div><div style="font-size:3rem">🔥</div><h2 style="margin:12px 0 8px">${e.message}</h2>
+      <p style="color:#8C857A;font-size:.875rem">Verifique a configuração do Firebase e as permissões do Firestore.</p></div></div>`;
   }
 })();

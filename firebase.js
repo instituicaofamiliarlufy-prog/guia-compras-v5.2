@@ -4,7 +4,7 @@ import {
   getFirestore,
   collection, doc, getDoc, getDocs,
   setDoc, updateDoc, deleteDoc, onSnapshot,
-  query, orderBy
+  deleteField, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -23,5 +23,5 @@ export {
   app, db,
   collection, doc, getDoc, getDocs,
   setDoc, updateDoc, deleteDoc, onSnapshot,
-  query, orderBy
+  deleteField, query, orderBy
 };
