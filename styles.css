@@ -1600,3 +1600,163 @@ input[type="color"] {
   }
   .adhoc-field-name { grid-column: 1 / -1; }
 }
+
+/* ═══════════════════════════════════════════
+   MODAL ADD-TO-LISTA — tabbed compact layout
+═══════════════════════════════════════════ */
+
+/* ── Modal size ──────────────────────────────── */
+.modal-add {
+  max-width: 520px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Inner tabs ──────────────────────────────── */
+.add-modal-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border-soft);
+  flex-shrink: 0;
+  padding: 0 24px;
+}
+.add-modal-tab {
+  font-family: 'Syne', sans-serif;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  padding: 10px 18px;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  background: none;
+  transition: color var(--transition), border-color var(--transition);
+}
+.add-modal-tab:hover  { color: var(--ink); }
+.add-modal-tab.active { color: var(--accent-dk); border-bottom-color: var(--accent); }
+
+/* ── Panel (scrollable area) ─────────────────── */
+.add-modal-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+.add-modal-panel.hidden { display: none; }
+
+/* ── Catalog tab ─────────────────────────────── */
+.add-catalog-filters {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px 8px;
+  flex-shrink: 0;
+}
+.add-product-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 4px;
+  min-height: 0;
+}
+
+/* ── Novo produto tab ────────────────────────── */
+.novo-produto-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.novo-row {
+  display: flex;
+  gap: 8px;
+}
+.novo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.novo-field-full { flex: 0 0 100%; width: 100%; }
+.novo-field label {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-3);
+}
+.novo-field input,
+.novo-field select {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: .88rem;
+  color: var(--ink);
+  width: 100%;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.novo-field input:focus,
+.novo-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-lt);
+  background: var(--surface);
+}
+
+/* ── Category row with "+ Nova" inline ──────── */
+.novo-cat-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.novo-cat-row select { flex: 1; }
+.novo-cat-row .btn-sm { flex-shrink: 0; white-space: nowrap; padding: 7px 12px; font-size: .78rem; }
+
+.novo-new-cat-wrap {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  align-items: stretch;
+}
+.novo-new-cat-wrap input { flex: 1; padding: 7px 10px; border: 1.5px solid var(--accent); border-radius: 8px; background: var(--accent-lt); font-family: inherit; font-size: .88rem; }
+.novo-new-cat-wrap input:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-lt); }
+.novo-new-cat-wrap.hidden { display: none; }
+
+/* ── Hint text ───────────────────────────────── */
+.novo-hint {
+  font-size: .75rem;
+  color: var(--ink-3);
+  background: var(--gold-lt);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+/* ── Sticky footer inside panel ─────────────── */
+.add-modal-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-soft);
+  padding: 12px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: var(--surface);
+}
+
+/* ── Remove old adhoc styles if leftover ────── */
+.adhoc-section, .adhoc-toggle-btn, .adhoc-form,
+.adhoc-pending-list, .adhoc-pending-row { display: none !important; }
+
+@media (max-width: 540px) {
+  .novo-row { flex-wrap: wrap; }
+  .novo-field { flex: 0 0 calc(50% - 4px); }
+  .novo-field-full { flex: 0 0 100%; }
+}

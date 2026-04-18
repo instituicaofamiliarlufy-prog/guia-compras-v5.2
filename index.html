@@ -126,52 +126,6 @@
         </label>
       </div>
       <div id="gerar-catalog" class="gerar-catalog"></div>
-      <!-- Ad-hoc in gerar view -->
-      <div class="adhoc-section" style="margin-bottom:0">
-        <button id="btn-toggle-adhoc-gerar" class="adhoc-toggle-btn">
-          <span class="adhoc-toggle-icon">＋</span>
-          <span>Produto não encontrado? Adicionar manualmente à lista</span>
-        </button>
-        <div id="adhoc-form-gerar" class="adhoc-form hidden">
-          <div class="adhoc-form-grid">
-            <div class="adhoc-field adhoc-field-name">
-              <label>Nome do produto</label>
-              <input type="text" id="adhoc-gerar-name" placeholder="Ex: Leite de coco 400ml"/>
-            </div>
-            <div class="adhoc-field">
-              <label>Quantidade</label>
-              <input type="number" id="adhoc-gerar-qty" value="1" min="0.01" step="0.01"/>
-            </div>
-            <div class="adhoc-field">
-              <label>Unidade</label>
-              <select id="adhoc-gerar-unit">
-                <option value="un">un</option>
-                <option value="kg">kg</option>
-                <option value="g">g</option>
-                <option value="L">L</option>
-                <option value="ml">ml</option>
-                <option value="cx">cx</option>
-                <option value="pack">pack</option>
-                <option value="dz">dz</option>
-              </select>
-            </div>
-            <div class="adhoc-field">
-              <label>Preço (Kz)</label>
-              <input type="number" id="adhoc-gerar-preco" placeholder="0" min="0" step="1"/>
-            </div>
-            <div class="adhoc-field">
-              <label>Supermercado</label>
-              <select id="adhoc-gerar-shop"><option value="">— Nenhum —</option></select>
-            </div>
-            <div class="adhoc-field">
-              <label>Categoria</label>
-              <input type="text" id="adhoc-gerar-cat" placeholder="Ex: Outros"/>
-            </div>
-          </div>
-          <div id="adhoc-gerar-list" class="adhoc-pending-list"></div>
-        </div>
-      </div>
-
       <div class="gerar-footer">
         <span id="gerar-count" class="gerar-count">0 produtos seleccionados</span>
         <button id="btn-create-list" class="btn-primary" disabled>
@@ -247,15 +201,23 @@
     </div>
   </div>
 
-  <!-- Add product to lista -->
+  <!-- Add product to lista — tabbed layout -->
   <div id="modal-add-to-lista" class="modal-overlay hidden">
-    <div class="modal modal-lg">
+    <div class="modal modal-add">
       <div class="modal-header">
-        <h3>Adicionar Produtos à Lista</h3>
+        <h3>Adicionar Produtos</h3>
         <button class="modal-close" data-modal="modal-add-to-lista">✕</button>
       </div>
-      <div class="modal-body" style="padding-bottom:0">
-        <div class="filter-bar" style="margin-bottom:12px">
+
+      <!-- Inner tabs -->
+      <div class="add-modal-tabs">
+        <button class="add-modal-tab active" data-tab="catalog">📦 Do catálogo</button>
+        <button class="add-modal-tab" data-tab="novo">✨ Novo produto</button>
+      </div>
+
+      <!-- Tab: catalog -->
+      <div id="add-tab-catalog" class="add-modal-panel">
+        <div class="add-catalog-filters">
           <div class="search-wrap" style="flex:1">
             <span class="search-icon">🔍</span>
             <input type="text" id="add-product-search" placeholder="Pesquisar…"/>
@@ -263,58 +225,69 @@
           <select id="add-product-cat"></select>
         </div>
         <div id="add-product-list" class="add-product-list"></div>
-      </div>
-      <!-- Ad-hoc product section -->
-      <div class="adhoc-section">
-        <button id="btn-toggle-adhoc" class="adhoc-toggle-btn">
-          <span class="adhoc-toggle-icon">＋</span>
-          <span>Produto não encontrado no catálogo? Adicionar manualmente</span>
-        </button>
-        <div id="adhoc-form" class="adhoc-form hidden">
-          <div class="adhoc-form-grid">
-            <div class="adhoc-field adhoc-field-name">
-              <label>Nome do produto</label>
-              <input type="text" id="adhoc-name" placeholder="Ex: Leite de coco 400ml"/>
-            </div>
-            <div class="adhoc-field">
-              <label>Quantidade</label>
-              <input type="number" id="adhoc-qty" value="1" min="0.01" step="0.01"/>
-            </div>
-            <div class="adhoc-field">
-              <label>Unidade</label>
-              <select id="adhoc-unit">
-                <option value="un">un</option>
-                <option value="kg">kg</option>
-                <option value="g">g</option>
-                <option value="L">L</option>
-                <option value="ml">ml</option>
-                <option value="cx">cx</option>
-                <option value="pack">pack</option>
-                <option value="dz">dz</option>
-              </select>
-            </div>
-            <div class="adhoc-field">
-              <label>Preço (Kz)</label>
-              <input type="number" id="adhoc-preco" placeholder="0" min="0" step="1"/>
-            </div>
-            <div class="adhoc-field">
-              <label>Supermercado</label>
-              <select id="adhoc-shop"><option value="">— Nenhum —</option></select>
-            </div>
-            <div class="adhoc-field">
-              <label>Categoria</label>
-              <input type="text" id="adhoc-cat" placeholder="Ex: Outros"/>
-            </div>
-          </div>
-          <button id="btn-add-adhoc" class="btn-primary" style="width:100%;margin-top:4px">
-            ＋ Adicionar à lista
-          </button>
+        <div class="modal-footer add-modal-footer">
+          <button class="btn-secondary" data-modal="modal-add-to-lista">Cancelar</button>
+          <button id="btn-confirm-add-products" class="btn-primary">Adicionar Seleccionados</button>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" data-modal="modal-add-to-lista">Cancelar</button>
-        <button id="btn-confirm-add-products" class="btn-primary">Adicionar Seleccionados</button>
+
+      <!-- Tab: novo produto (saves to catalog first) -->
+      <div id="add-tab-novo" class="add-modal-panel hidden">
+        <div class="novo-produto-form">
+          <div class="novo-row">
+            <div class="novo-field novo-field-full">
+              <label>Nome do produto *</label>
+              <input type="text" id="novo-name" placeholder="Ex: Leite de coco 400ml"/>
+            </div>
+          </div>
+          <div class="novo-row">
+            <div class="novo-field">
+              <label>Quantidade</label>
+              <input type="number" id="novo-qty" value="1" min="0.01" step="0.01"/>
+            </div>
+            <div class="novo-field">
+              <label>Unidade</label>
+              <select id="novo-unit">
+                <option value="un">un</option><option value="kg">kg</option>
+                <option value="g">g</option><option value="L">L</option>
+                <option value="ml">ml</option><option value="cx">cx</option>
+                <option value="pack">pack</option><option value="dz">dz</option>
+              </select>
+            </div>
+            <div class="novo-field">
+              <label>Preço (Kz)</label>
+              <input type="number" id="novo-preco" placeholder="0" min="0" step="1"/>
+            </div>
+          </div>
+          <div class="novo-row">
+            <div class="novo-field novo-field-full">
+              <label>Supermercado sugerido</label>
+              <select id="novo-shop"><option value="">— Nenhum —</option></select>
+            </div>
+          </div>
+          <div class="novo-row">
+            <div class="novo-field novo-field-full">
+              <label>Categoria *</label>
+              <div class="novo-cat-row">
+                <select id="novo-cat-select">
+                  <option value="">— Seleccionar categoria —</option>
+                </select>
+                <button id="btn-novo-new-cat" class="btn-secondary btn-sm" title="Nova categoria">+ Nova</button>
+              </div>
+              <div id="novo-new-cat-wrap" class="novo-new-cat-wrap hidden">
+                <input type="text" id="novo-new-cat-input" placeholder="Nome da nova categoria…"/>
+                <button id="btn-novo-create-cat" class="btn-primary btn-sm">Criar</button>
+              </div>
+            </div>
+          </div>
+          <p class="novo-hint">💡 O produto será guardado no catálogo e poderá ser reutilizado no futuro.</p>
+        </div>
+        <div class="modal-footer add-modal-footer">
+          <button class="btn-secondary" data-modal="modal-add-to-lista">Cancelar</button>
+          <button id="btn-save-novo-produto" class="btn-primary">Guardar e adicionar à lista</button>
+        </div>
       </div>
+
     </div>
   </div>
 

@@ -53,17 +53,8 @@ function openModal(id)  { document.getElementById(id).classList.remove("hidden")
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 
 // ── Resolve item data from catalog ─────────────────
-// listaItem: { catId, itemIdx, qty, checked } OR adhoc { adhoc:true, name, ... }
+// listaItem: { catId, itemIdx, qty, checked }
 function resolveItem(listaItem) {
-  // Ad-hoc items are self-contained — return as-is with shape normalisation
-  if (listaItem.adhoc) {
-    const shop = state.supermercados[listaItem.shopId];
-    return {
-      ...listaItem,
-      shopNome: shop?.nome || listaItem.shopNome || "",
-      shopCor:  shop?.cor  || listaItem.shopCor  || "#888",
-    };
-  }
   const catData = state.catalog[listaItem.catId];
   if (!catData) return null;
   const catalogItem = catData.items[listaItem.itemIdx];
@@ -98,35 +89,6 @@ function generateListaName(dateStr) {
   return `${base} #${n}`;
 }
 
-// ── Ad-hoc helpers ─────────────────────────────────
-function adhocKey(name) {
-  return `adhoc_${slugify(name)}_${Date.now()}`;
-}
-function buildAdhocItem({ name, qty, unit, preco, shopId, categoria }) {
-  const shop = state.supermercados[shopId];
-  return {
-    adhoc:     true,
-    name:      name.trim(),
-    qty:       parseFloat(qty)   || 1,
-    unit:      unit              || "un",
-    preco:     parseFloat(preco) || 0,
-    checked:   false,
-    categoria: (categoria || "Outros").trim(),
-    shopId:    shopId    || "",
-    shopNome:  shop?.nome || "",
-    shopCor:   shop?.cor  || "#888",
-  };
-}
-function populateAdhocShopSelects() {
-  const shops = Object.entries(state.supermercados)
-    .sort((a, b) => a[1].nome.localeCompare(b[1].nome));
-  const opts = '<option value="">— Nenhum —</option>' +
-    shops.map(([id, s]) => `<option value="${id}">${s.nome}</option>`).join("");
-  ["adhoc-shop", "adhoc-gerar-shop"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.innerHTML = opts; }
-  });
-}
 
 // ── Shop distribution (by value) ───────────────────
 const SHOP_COLORS_FALLBACK = ["#2D6A4F","#E07A5F","#C9A84C","#5B7FA6","#8E6BBF","#3D9970","#E8743B","#708090"];
@@ -340,7 +302,6 @@ function populateCategorySelects() {
 }
 
 function populateShopSelects() {
-  populateAdhocShopSelects();
   const shops = Object.entries(state.supermercados).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
   // Item modal shop select
   const itemShopSel = document.getElementById("item-shop-input");
@@ -738,11 +699,6 @@ async function initGerarView() {
   document.getElementById("gerar-supermercado").value = "";
   document.getElementById("gerar-shop-dist").classList.add("hidden");
   document.getElementById("gerar-budget-preview").classList.add("hidden");
-  // Reset adhoc state
-  state.adhocGerarItems.length = 0;
-  document.getElementById("adhoc-form-gerar").classList.add("hidden");
-  document.getElementById("btn-toggle-adhoc-gerar").classList.remove("open");
-  renderAdhocGerarList();
   renderGerarCatalog();
 }
 
@@ -817,15 +773,8 @@ function renderGerarCatalog() {
 }
 
 function updateGerarCount() {
-  const catalogN = gerarSelections.size;
-  const adhocN   = state.adhocGerarItems.length;
-  const n        = catalogN + adhocN;
-  const parts    = [];
-  if (catalogN > 0) parts.push(`${catalogN} do catálogo`);
-  if (adhocN   > 0) parts.push(`${adhocN} ad-hoc`);
-  document.getElementById("gerar-count").textContent = n > 0
-    ? `${n} produto${n !== 1 ? "s" : ""} seleccionado${n !== 1 ? "s" : ""}${parts.length ? ` (${parts.join(", ")})` : ""}`
-    : "0 produtos seleccionados";
+  const n = gerarSelections.size;
+  document.getElementById("gerar-count").textContent = `${n} produto${n !== 1 ? "s" : ""} seleccionado${n !== 1 ? "s" : ""}`;
   document.getElementById("btn-create-list").disabled = n === 0;
 }
 
@@ -877,8 +826,7 @@ document.getElementById("btn-create-list").addEventListener("click", async () =>
   let   nome    = document.getElementById("gerar-nome").value.trim();
   const superM  = document.getElementById("gerar-supermercado").value.trim();
   if (!dateStr)             return showToast("Seleccione uma data.", "error");
-  if (!gerarSelections.size && !state.adhocGerarItems.length)
-    return showToast("Seleccione pelo menos um produto ou adicione um produto ad-hoc.", "error");
+  if (!gerarSelections.size) return showToast("Seleccione pelo menos um produto.", "error");
   if (!nome) { await loadAllListas(); nome = generateListaName(dateStr); }
 
   const btn = document.getElementById("btn-create-list");
@@ -1503,148 +1451,156 @@ document.getElementById("btn-iti-back").addEventListener("click", () => {
   showItiStep("config");
 });
 
+
 // ═══════════════════════════════════════════════════
-// AD-HOC PRODUCTS — UI event handlers
+// MODAL ADD-TO-LISTA — tabbed (catalog + novo produto)
 // ═══════════════════════════════════════════════════
 
-// ── Adhoc in modal-add-to-lista (existing lista) ────
-document.getElementById("btn-toggle-adhoc").addEventListener("click", () => {
-  const form    = document.getElementById("adhoc-form");
-  const btn     = document.getElementById("btn-toggle-adhoc");
-  const opening = form.classList.contains("hidden");
-  form.classList.toggle("hidden", !opening);
-  btn.classList.toggle("open", opening);
-  if (opening) { populateAdhocShopSelects(); document.getElementById("adhoc-name").focus(); }
+// ── Inner tab switching ─────────────────────────────
+document.querySelectorAll(".add-modal-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".add-modal-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".add-modal-panel").forEach(p => p.classList.add("hidden"));
+    tab.classList.add("active");
+    document.getElementById(`add-tab-${tab.dataset.tab}`).classList.remove("hidden");
+    if (tab.dataset.tab === "novo") {
+      populateNovoProdutoSelects();
+      document.getElementById("novo-name").focus();
+    }
+  });
 });
 
-document.getElementById("btn-add-adhoc").addEventListener("click", async () => {
-  const name   = document.getElementById("adhoc-name").value.trim();
-  const qty    = document.getElementById("adhoc-qty").value;
-  const unit   = document.getElementById("adhoc-unit").value;
-  const preco  = document.getElementById("adhoc-preco").value;
-  const shopId = document.getElementById("adhoc-shop").value;
-  const cat    = document.getElementById("adhoc-cat").value;
+// ── Populate selects for "novo produto" tab ─────────
+function populateNovoProdutoSelects() {
+  // Shop select
+  const shops = Object.entries(state.supermercados)
+    .sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+  document.getElementById("novo-shop").innerHTML =
+    '<option value="">— Nenhum —</option>' +
+    shops.map(([id, s]) => `<option value="${id}">${s.nome}</option>`).join("");
 
-  if (!name) return showToast("Insira o nome do produto.", "error");
+  // Category select
+  const cats = Object.entries(state.catalog)
+    .sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+  document.getElementById("novo-cat-select").innerHTML =
+    '<option value="">— Seleccionar categoria —</option>' +
+    cats.map(([id, c]) => `<option value="${id}">${c.nome}</option>`).join("");
+}
+
+// ── "+ Nova" category inline creation ──────────────
+document.getElementById("btn-novo-new-cat").addEventListener("click", () => {
+  const wrap = document.getElementById("novo-new-cat-wrap");
+  const isHidden = wrap.classList.contains("hidden");
+  wrap.classList.toggle("hidden", !isHidden);
+  if (isHidden) document.getElementById("novo-new-cat-input").focus();
+});
+
+document.getElementById("btn-novo-create-cat").addEventListener("click", async () => {
+  const name = document.getElementById("novo-new-cat-input").value.trim();
+  if (!name) return showToast("Insira o nome da categoria.", "error");
+  const catId = slugify(name);
+  if (state.catalog[catId]) {
+    // Already exists — just select it
+    document.getElementById("novo-cat-select").value = catId;
+    document.getElementById("novo-new-cat-wrap").classList.add("hidden");
+    document.getElementById("novo-new-cat-input").value = "";
+    return showToast(`Categoria "${name}" já existe — seleccionada.`, "success");
+  }
+  try {
+    await saveCategoryToFirestore(catId, { nome: name, items: [] });
+    await loadCatalog();
+    populateNovoProdutoSelects();
+    document.getElementById("novo-cat-select").value = catId;
+    document.getElementById("novo-new-cat-wrap").classList.add("hidden");
+    document.getElementById("novo-new-cat-input").value = "";
+    showToast(`Categoria "${name}" criada!`, "success");
+  } catch (e) {
+    console.error(e); showToast("Erro ao criar categoria.", "error");
+  }
+});
+
+// Also allow Enter in new-cat input
+document.getElementById("novo-new-cat-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); document.getElementById("btn-novo-create-cat").click(); }
+});
+
+// ── Save novo produto → catalog → lista ────────────
+document.getElementById("btn-save-novo-produto").addEventListener("click", async () => {
+  const name   = document.getElementById("novo-name").value.trim();
+  const qty    = parseFloat(document.getElementById("novo-qty").value)   || 1;
+  const unit   = document.getElementById("novo-unit").value;
+  const preco  = parseFloat(document.getElementById("novo-preco").value) || 0;
+  const shopId = document.getElementById("novo-shop").value;
+  const catId  = document.getElementById("novo-cat-select").value;
+
+  if (!name)  return showToast("Insira o nome do produto.", "error");
+  if (!catId) return showToast("Seleccione ou crie uma categoria.", "error");
   if (!state.currentListaId) return showToast("Nenhuma lista activa.", "error");
 
-  const key  = adhocKey(name);
-  const item = buildAdhocItem({ name, qty, unit, preco, shopId, categoria: cat });
-
   try {
-    const upd = {}; upd[`items.${key}`] = item;
+    const btn = document.getElementById("btn-save-novo-produto");
+    btn.disabled = true; btn.textContent = "A guardar…";
+
+    // 1. Append product to catalog category
+    const catData   = state.catalog[catId] || { nome: catId, items: [] };
+    const newItem   = { name, defaultQty: qty, unit, preco, bestShopId: shopId };
+
+    // Check for duplicate name in same category
+    const dupIdx = catData.items.findIndex(i => slugify(i.name) === slugify(name));
+    let itemIdx;
+    if (dupIdx >= 0) {
+      // Update existing
+      catData.items[dupIdx] = newItem;
+      itemIdx = dupIdx;
+      showToast(`Produto "${name}" actualizado no catálogo.`, "success");
+    } else {
+      catData.items.push(newItem);
+      itemIdx = catData.items.length - 1;
+    }
+
+    await saveCategoryToFirestore(catId, catData);
+    await loadCatalog(); // refresh state
+
+    // 2. Add reference to current lista
+    const key = itemKey(catId, itemIdx);
+    const upd = {}; upd[`items.${key}`] = { catId, itemIdx, qty, checked: false };
     await updateDoc(doc(db, "listas", state.currentListaId), upd);
-    showToast(`"${name}" adicionado!`, "success");
-    // Reset fields
-    ["adhoc-name","adhoc-preco","adhoc-cat"].forEach(id => { document.getElementById(id).value = ""; });
-    document.getElementById("adhoc-qty").value  = "1";
-    document.getElementById("adhoc-shop").value = "";
-    // Collapse
-    document.getElementById("adhoc-form").classList.add("hidden");
-    document.getElementById("btn-toggle-adhoc").classList.remove("open");
-  } catch (e) { console.error(e); showToast("Erro ao adicionar produto.", "error"); }
-});
 
-// ── Adhoc in Gerar view (pending list) ─────────────
-document.getElementById("btn-toggle-adhoc-gerar").addEventListener("click", () => {
-  const form    = document.getElementById("adhoc-form-gerar");
-  const btn     = document.getElementById("btn-toggle-adhoc-gerar");
-  const opening = form.classList.contains("hidden");
-  form.classList.toggle("hidden", !opening);
-  btn.classList.toggle("open", opening);
-  if (opening) { populateAdhocShopSelects(); document.getElementById("adhoc-gerar-name").focus(); }
-});
+    showToast(`"${name}" adicionado ao catálogo e à lista!`, "success");
 
-function addAdhocToGerarList() {
-  const name   = document.getElementById("adhoc-gerar-name").value.trim();
-  const qty    = document.getElementById("adhoc-gerar-qty").value;
-  const unit   = document.getElementById("adhoc-gerar-unit").value;
-  const preco  = document.getElementById("adhoc-gerar-preco").value;
-  const shopId = document.getElementById("adhoc-gerar-shop").value;
-  const cat    = document.getElementById("adhoc-gerar-cat").value;
+    // Reset form
+    ["novo-name", "novo-preco"].forEach(id => { document.getElementById(id).value = ""; });
+    document.getElementById("novo-qty").value  = "1";
+    document.getElementById("novo-unit").value = "un";
+    document.getElementById("novo-shop").value = "";
+    document.getElementById("novo-cat-select").value = "";
+    document.getElementById("novo-new-cat-wrap").classList.add("hidden");
+    document.getElementById("novo-new-cat-input").value = "";
 
-  if (!name) return showToast("Insira o nome do produto.", "error");
-
-  const key  = adhocKey(name);
-  const item = buildAdhocItem({ name, qty, unit, preco, shopId, categoria: cat });
-  state.adhocGerarItems.push({ key, item });
-
-  // Clear name + price for quick successive adds; keep other fields
-  document.getElementById("adhoc-gerar-name").value  = "";
-  document.getElementById("adhoc-gerar-preco").value = "";
-  document.getElementById("adhoc-gerar-name").focus();
-
-  renderAdhocGerarList();
-  updateGerarCount();
-  updateGerarBudget();
-}
-
-document.getElementById("adhoc-gerar-name").addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); addAdhocToGerarList(); }
-});
-
-function renderAdhocGerarList() {
-  const container = document.getElementById("adhoc-gerar-list");
-  container.innerHTML = "";
-  if (!state.adhocGerarItems.length) return;
-
-  const header = document.createElement("div");
-  header.className = "adhoc-pending-header";
-  header.textContent = `${state.adhocGerarItems.length} produto(s) ad-hoc adicionado(s)`;
-  container.appendChild(header);
-
-  state.adhocGerarItems.forEach(({ key, item }, idx) => {
-    const shop = state.supermercados[item.shopId];
-    const row  = document.createElement("div");
-    row.className = "adhoc-pending-row";
-    row.innerHTML = `
-      <div class="adhoc-pending-info">
-        <span class="adhoc-pending-name">${item.name}</span>
-        <span class="adhoc-pending-meta">
-          ${item.qty} ${item.unit}
-          ${item.preco ? ` · Kz ${Math.round(item.preco).toLocaleString("pt-AO")}` : ""}
-          ${shop ? ` · <span style="color:${shop.cor};font-weight:600">${shop.nome}</span>` : ""}
-          ${item.categoria !== "Outros" ? ` · ${item.categoria}` : ""}
-        </span>
-      </div>
-      <button class="btn-icon danger" title="Remover" data-idx="${idx}">✕</button>`;
-    row.querySelector(".btn-icon").addEventListener("click", () => {
-      state.adhocGerarItems.splice(idx, 1);
-      renderAdhocGerarList();
-      updateGerarCount();
-      updateGerarBudget();
+    // Switch back to catalog tab and close modal
+    closeModal("modal-add-to-lista");
+    // Reset inner tab to catalog for next open
+    document.querySelectorAll(".add-modal-tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.tab === "catalog");
     });
-    container.appendChild(row);
+    document.querySelectorAll(".add-modal-panel").forEach(p => p.classList.add("hidden"));
+    document.getElementById("add-tab-catalog").classList.remove("hidden");
+
+  } catch (e) {
+    console.error(e); showToast("Erro ao guardar produto.", "error");
+  } finally {
+    const btn = document.getElementById("btn-save-novo-produto");
+    btn.disabled = false; btn.textContent = "Guardar e adicionar à lista";
+  }
+});
+
+// ── Re-open: reset to catalog tab ─────────────────
+document.getElementById("btn-add-to-lista").addEventListener("click", () => {
+  // Reset inner tabs
+  document.querySelectorAll(".add-modal-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.tab === "catalog");
   });
-
-  // Add button below the fields (injected once)
-  if (!document.getElementById("btn-adhoc-gerar-add")) {
-    const addBtn     = document.createElement("button");
-    addBtn.id        = "btn-adhoc-gerar-add";
-    addBtn.className = "btn-secondary";
-    addBtn.style.cssText = "width:100%;margin-top:8px";
-    addBtn.textContent   = "＋ Adicionar este produto";
-    addBtn.addEventListener("click", addAdhocToGerarList);
-    document.getElementById("adhoc-form-gerar").insertBefore(
-      addBtn,
-      document.getElementById("adhoc-gerar-list")
-    );
-  }
-}
-
-// Inject the add button the first time the form opens (before any items exist)
-document.getElementById("btn-toggle-adhoc-gerar").addEventListener("click", function inject() {
-  if (!document.getElementById("btn-adhoc-gerar-add")) {
-    const addBtn     = document.createElement("button");
-    addBtn.id        = "btn-adhoc-gerar-add";
-    addBtn.className = "btn-secondary";
-    addBtn.style.cssText = "width:100%;margin-top:8px";
-    addBtn.textContent   = "＋ Adicionar este produto";
-    addBtn.addEventListener("click", addAdhocToGerarList);
-    document.getElementById("adhoc-form-gerar").insertBefore(
-      addBtn,
-      document.getElementById("adhoc-gerar-list")
-    );
-  }
-  this.removeEventListener("click", inject);
+  document.querySelectorAll(".add-modal-panel").forEach(p => p.classList.add("hidden"));
+  document.getElementById("add-tab-catalog").classList.remove("hidden");
+  // (catalog list rendering is already handled by the existing btn-add-to-lista listener above)
 });
