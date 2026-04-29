@@ -488,6 +488,11 @@ function renderLista(listaData) {
     return;
   }
 
+  console.group("🔍 Debug de Renderização da Lista");
+  console.log("ID da Lista:", rawItems.listaId);
+  console.log("Itens no Firestore (referências):", rawItems);
+  console.log("Estado do Catálogo no State:", state.catalog);
+
   document.getElementById("lista-empty").classList.add("hidden");
   container.classList.remove("hidden");
   document.getElementById("lista-summary").classList.remove("hidden");
